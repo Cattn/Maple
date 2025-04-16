@@ -58,7 +58,6 @@
 		changedArtist = album?.artist?.toString() ?? '';
 		changedYear = album?.year?.toString() ?? '';
 		playlists = await OPFS.get().playlists();
-
 	});
 
 	async function refresh(albumName: string) {
@@ -230,7 +229,9 @@
 								src={image}
 								alt={album?.name?.toString() ?? ''}
 							/>
-							<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100">
+							<div
+								class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100"
+							>
 								<label
 									for="album-image"
 									class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
@@ -276,11 +277,7 @@
 						{/if}
 					</div>
 					<div class="flex items-center gap-2">
-						<Button
-							class="h-9 w-9 p-0"
-							variant="ghost"
-							on:click={() => editMode()}
-						>
+						<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => editMode()}>
 							{#if editModeOn}
 								<Check class="h-5 w-5" />
 							{:else}
@@ -297,8 +294,8 @@
 								<AlertDialog.Header>
 									<AlertDialog.Title>Delete Album</AlertDialog.Title>
 									<AlertDialog.Description>
-										This action cannot be undone. This will NOT delete the tracks within the album, only the
-										album itself.
+										This action cannot be undone. This will NOT delete the tracks within the album,
+										only the album itself.
 									</AlertDialog.Description>
 								</AlertDialog.Header>
 								<AlertDialog.Footer>
@@ -344,11 +341,7 @@
 
 	<div class="mb-4 flex items-center justify-between">
 		<div class="flex items-center gap-2">
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapAscending()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapAscending()}>
 				{#if ascending}
 					<ArrowUpAZ class="h-5 w-5" />
 				{:else}
@@ -357,11 +350,7 @@
 			</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button
-						class="h-9 w-9 p-0"
-						variant="ghost"
-						builders={[builder]}
-					>
+					<Button class="h-9 w-9 p-0" variant="ghost" builders={[builder]}>
 						<ListFilter class="h-5 w-5" />
 					</Button>
 				</DropdownMenu.Trigger>
@@ -381,11 +370,7 @@
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapListType()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapListType()}>
 				<List class="h-5 w-5" />
 			</Button>
 		</div>

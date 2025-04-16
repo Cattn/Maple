@@ -225,7 +225,7 @@ export class UserManager {
 				credentials: 'include',
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({ friendId: id })
 			});
@@ -245,7 +245,7 @@ export class UserManager {
 				credentials: 'include',
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({ friendId: id })
 			});
@@ -268,7 +268,7 @@ export class UserManager {
 				credentials: 'include',
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({ friendId: id })
 			});
@@ -284,10 +284,13 @@ export class UserManager {
 
 	public static getRequests = async () => {
 		try {
-			const response = await fetch(`${this.SERVER}/user/friends/get/requests/${get(UserInfo)?.id}`, {
-				credentials: 'include',
-				method: 'GET'
-			});
+			const response = await fetch(
+				`${this.SERVER}/user/friends/get/requests/${get(UserInfo)?.id}`,
+				{
+					credentials: 'include',
+					method: 'GET'
+				}
+			);
 			const data = await response.json();
 			if (response.ok) {
 				return data;
@@ -320,7 +323,7 @@ export class UserManager {
 				credentials: 'include',
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
+					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({ friendId: id })
 			});

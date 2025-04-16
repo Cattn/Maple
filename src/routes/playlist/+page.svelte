@@ -93,7 +93,7 @@
 		if (imagePath instanceof Blob) {
 			return URL.createObjectURL(imagePath);
 		}
-		
+
 		const response = await OPFS.get().image(imagePath);
 		const arrayBuffer = await response.arrayBuffer();
 		const blob = new Blob([arrayBuffer]);
@@ -268,10 +268,11 @@
 	}
 
 	function filterSongs() {
-		filteredSongs = songs.filter(song =>
-			song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			song.album.toLowerCase().includes(searchQuery.toLowerCase())
+		filteredSongs = songs.filter(
+			(song) =>
+				song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				song.album.toLowerCase().includes(searchQuery.toLowerCase())
 		);
 	}
 </script>
@@ -288,7 +289,9 @@
 								src={image}
 								alt={playlist?.name?.toString() ?? ''}
 							/>
-							<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100">
+							<div
+								class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100"
+							>
 								<label
 									for="playlist-image"
 									class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
@@ -334,11 +337,7 @@
 						{/if}
 					</div>
 					<div class="flex items-center gap-2">
-						<Button
-							class="h-9 w-9 p-0"
-							variant="ghost"
-							on:click={() => editMode()}
-						>
+						<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => editMode()}>
 							{#if editModeOn}
 								<Check class="h-5 w-5" />
 							{:else}
@@ -355,8 +354,8 @@
 								<AlertDialog.Header>
 									<AlertDialog.Title>Delete Playlist</AlertDialog.Title>
 									<AlertDialog.Description>
-										This action cannot be undone. This will NOT delete the tracks within the playlist, only the
-										playlist itself.
+										This action cannot be undone. This will NOT delete the tracks within the
+										playlist, only the playlist itself.
 									</AlertDialog.Description>
 								</AlertDialog.Header>
 								<AlertDialog.Footer>
@@ -391,11 +390,7 @@
 
 	<div class="mb-4 flex items-center justify-between">
 		<div class="flex items-center gap-2">
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapAscending()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapAscending()}>
 				{#if ascending}
 					<ArrowUpAZ class="h-5 w-5" />
 				{:else}
@@ -404,11 +399,7 @@
 			</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button
-						class="h-9 w-9 p-0"
-						variant="ghost"
-						builders={[builder]}
-					>
+					<Button class="h-9 w-9 p-0" variant="ghost" builders={[builder]}>
 						<ListFilter class="h-5 w-5" />
 					</Button>
 				</DropdownMenu.Trigger>
@@ -422,11 +413,7 @@
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapListType()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapListType()}>
 				<List class="h-5 w-5" />
 			</Button>
 		</div>
@@ -434,7 +421,9 @@
 
 	{#if !editModeOn}
 		{#if listType !== 'list'}
-			<div class="my-5 ml-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 sm:gap-x-6 md:ml-6 md:grid-cols-3 md:gap-x-8 lg:grid-cols-4 lg:gap-x-10 xl:grid-cols-5 xl:gap-x-12">
+			<div
+				class="my-5 ml-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 sm:gap-x-6 md:ml-6 md:grid-cols-3 md:gap-x-8 lg:grid-cols-4 lg:gap-x-10 xl:grid-cols-5 xl:gap-x-12"
+			>
 				{#each tracks as track}
 					<GridTrack {track} {tracks} on:delete={(e) => openAlert(track)} />
 				{/each}
@@ -518,7 +507,9 @@
 			<section data-vaul-no-drag>
 				<div class="mb-4 px-4">
 					<div class="relative">
-						<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+						<Search
+							class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
 						<input
 							type="text"
 							placeholder="Search tracks..."

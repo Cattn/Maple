@@ -11,9 +11,9 @@ const certificate = fs.readFileSync('/etc/letsencrypt/live/maple.kolf.pro/cert.p
 const ca = fs.readFileSync('/etc/letsencrypt/live/maple.kolf.pro/chain.pem', 'utf8');
 
 const credentials = {
-    key: privateKey,
-    cert: certificate,
-    ca: ca
+	key: privateKey,
+	cert: certificate,
+	ca: ca
 };
 
 const server = https.createServer(credentials, app);

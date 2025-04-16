@@ -17,24 +17,44 @@
 		Info,
 		List,
 		ListFilter,
-		X
+		X,
+		Music,
+		Home as HomeIcon,
+		Plus,
+		Clock,
+		Star
 	} from 'lucide-svelte';
-// @ts-ignore
+	// @ts-ignore
 	import Lazy from 'svelte-lazy';
 	import { toast } from 'svelte-sonner';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { fade, slide } from 'svelte/transition';
 
 	$: recentlyPlayedSongs = $recentlyPlayedManager.get();
 
 	let tracks: Song[] = [];
 	let playlists: Playlist[] = [];
-
 	let onboard = true;
+	let isLoading = true;
+	let showWelcome = true;
+
 	onMount(async () => {
-		tracks = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-		playlists = await OPFS.get().playlists();
-		onboard = await OPFS.ifExists('tracks');
+		isLoading = true;
+		try {
+			tracks = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
+			playlists = await OPFS.get().playlists();
+			onboard = await OPFS.ifExists('tracks');
+		} catch (error) {
+			console.error('Error loading data:', error);
+		} finally {
+			isLoading = false;
+		}
 		title.set('Home');
+		
+		// Auto-hide welcome message after 8 seconds
+		setTimeout(() => {
+			showWelcome = false;
+		}, 8000);
 	});
 
 	let ascending = true;
@@ -44,10 +64,15 @@
 	}
 
 	async function getImageUrl(imagePath: string): Promise<string> {
-		const response = await OPFS.get().image(imagePath);
-		const arrayBuffer = await response.arrayBuffer();
-		const blob = new Blob([arrayBuffer]);
-		return URL.createObjectURL(blob);
+		try {
+			const response = await OPFS.get().image(imagePath);
+			const arrayBuffer = await response.arrayBuffer();
+			const blob = new Blob([arrayBuffer]);
+			return URL.createObjectURL(blob);
+		} catch (error) {
+			console.error('Error loading image:', error);
+			return '';
+		}
 	}
 
 	async function addTrackToPlaylist(track: Song, playlist: Playlist) {
@@ -66,204 +91,261 @@
 		selectedSong = track;
 	}
 
-	function hidetips() {
+	function hideTipsPanel() {
 		hideTips.set(true);
 	}
 </script>
 
-<div class="mt-2 flex flex-col items-center">
-	{#if !onboard}
-		<div class="flex flex-col items-center justify-center rounded-md p-5">
-			<Alert.Root class="p-4">
-				<Info class="h-4 w-4" />
-				<Alert.Title>Welcome!</Alert.Title>
-				<Alert.Description
-					>This site allows you to upload your music library, and explore and organize your music. <br
-					/>
-					You can upload your music by going to settings or using the developer terminal.</Alert.Description
-				>
-			</Alert.Root>
-		</div>
-		<div class="flex flex-col items-center justify-center rounded-md p-1">
-			<Alert.Root class="p-4" variant="destructive">
-				<CircleAlert class="h-4 w-4" />
-				<Alert.Title>Issue</Alert.Title>
-				<Alert.Description
-					>It seems like you are missing a library, head to <Button
-						class="m-0 p-1"
-						variant="link"
-						href="/settings">Settings</Button
-					> to add one.</Alert.Description
-				>
-			</Alert.Root>
+<div class="container mx-auto max-w-7xl px-4 py-6">
+	{#if isLoading}
+		<div class="flex h-40 items-center justify-center">
+			<div class="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
 		</div>
 	{:else}
-		<div class="justify-centerrounded-md mt-2 flex flex-col items-center">
-			<Alert.Root class="p-4">
-				<CircleCheck color="lime" class="h-4 w-4" />
-				<Alert.Title>Done!</Alert.Title>
-				<Alert.Description
-					>You're all set! Head to <Button
-						class="m-0 p-1 text-secondary-foreground"
-						variant="link"
-						href="/tracks">/tracks</Button
-					> to see your full library!</Alert.Description
-				>
-			</Alert.Root>
+		<!-- Welcome alert section -->
+		{#if showWelcome}
+			<div in:fade={{ duration: 300 }} out:fade={{ duration: 300 }} class="mb-6">
+				{#if !onboard}
+					<Alert.Root class="relative overflow-hidden rounded-xl border-0 bg-gradient-to-r from-primary/20 to-secondary/20 p-6 shadow-md">
+						<div class="flex items-start gap-4">
+							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+								<Info size={20} />
+							</div>
+							<div class="flex-1">
+								<Alert.Title class="mb-2 text-xl font-semibold text-foreground">Welcome to Maple</Alert.Title>
+								<Alert.Description class="text-base text-muted-foreground">
+									This app allows you to upload your music library, and explore and organize your music.
+									<br/>Start by adding music in <Button variant="link" href="/settings" class="h-auto p-0">Settings</Button>.
+								</Alert.Description>
+							</div>
+							<Button variant="ghost" size="sm" class="shrink-0 rounded-full p-2 text-muted-foreground hover:text-foreground" on:click={() => showWelcome = false}>
+								<X size={18} />
+							</Button>
+						</div>
+					</Alert.Root>
+				{:else}
+					<Alert.Root class="relative overflow-hidden rounded-xl border-0 bg-gradient-to-r from-green-500/20 to-green-700/20 p-6 shadow-md">
+						<div class="flex items-start gap-4">
+							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-500">
+								<CircleCheck size={20} />
+							</div>
+							<div class="flex-1">
+								<Alert.Title class="mb-2 text-xl font-semibold text-foreground">Your music library is ready</Alert.Title>
+								<Alert.Description class="text-base text-muted-foreground">
+									You're all set! Enjoy your music collection or browse 
+									<Button variant="link" href="/tracks" class="h-auto p-0">all tracks</Button>.
+								</Alert.Description>
+							</div>
+							<Button variant="ghost" size="sm" class="shrink-0 rounded-full p-2 text-muted-foreground hover:text-foreground" on:click={() => showWelcome = false}>
+								<X size={18} />
+							</Button>
+						</div>
+					</Alert.Root>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Quick Access Section -->
+		<div class="mb-8">
+			<h2 class="mb-4 text-2xl font-bold text-foreground">Quick Access</h2>
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+				<a href="/tracks" class="group rounded-xl bg-secondary/40 p-4 transition-all hover:bg-secondary/60">
+					<div class="flex flex-col items-center justify-center space-y-3 text-center">
+						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary transition-all group-hover:bg-primary/30">
+							<Music size={24} />
+						</div>
+						<h3 class="text-sm font-medium text-foreground sm:text-base">Tracks</h3>
+					</div>
+				</a>
+				
+				<a href="/albums" class="group rounded-xl bg-secondary/40 p-4 transition-all hover:bg-secondary/60">
+					<div class="flex flex-col items-center justify-center space-y-3 text-center">
+						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary transition-all group-hover:bg-primary/30">
+							<ListFilter size={24} />
+						</div>
+						<h3 class="text-sm font-medium text-foreground sm:text-base">Albums</h3>
+					</div>
+				</a>
+				
+				<a href="/artists" class="group rounded-xl bg-secondary/40 p-4 transition-all hover:bg-secondary/60">
+					<div class="flex flex-col items-center justify-center space-y-3 text-center">
+						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary transition-all group-hover:bg-primary/30">
+							<Star size={24} />
+						</div>
+						<h3 class="text-sm font-medium text-foreground sm:text-base">Artists</h3>
+					</div>
+				</a>
+				
+				<a href="/playlists" class="group rounded-xl bg-secondary/40 p-4 transition-all hover:bg-secondary/60">
+					<div class="flex flex-col items-center justify-center space-y-3 text-center">
+						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary transition-all group-hover:bg-primary/30">
+							<List size={24} />
+						</div>
+						<h3 class="text-sm font-medium text-foreground sm:text-base">Playlists</h3>
+					</div>
+				</a>
+			</div>
 		</div>
+
+		<!-- Recently Played Section -->
+		{#if recentlyPlayedSongs.length > 0}
+			<div class="mb-8">
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-2xl font-bold text-foreground">Recently Played</h2>
+					<Button variant="ghost" size="sm" class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+						<Clock size={16} />
+						<span>View All</span>
+					</Button>
+				</div>
+				
+				<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+					{#each recentlyPlayedSongs.slice(0, 6) as track}
+						{#if track}
+							<div class="group flex flex-col rounded-xl bg-secondary/20 p-3 transition-all duration-200 hover:bg-secondary/40">
+								{#await getImageUrl(track.image) then image}
+									<ContextMenu
+										type={'track'}
+										on:delete={() => openAlert(track)}
+										on:addTrackToPlaylist={(e) => addTrackToPlaylist(track, e.detail.playlist)}
+									>
+										<TrackWrapper className="w-full" {track} {tracks}>
+											<Lazy height={180} keep={true}>
+												<div class="relative mb-3 aspect-square w-full overflow-hidden rounded-lg">
+													{#if image}
+														<img 
+															class="h-full w-full object-cover transition-all duration-300 group-hover:scale-105" 
+															src={image} 
+															alt={track.title} 
+														/>
+													{:else}
+														<div class="flex h-full w-full items-center justify-center bg-primary/20">
+															<Music size={30} class="text-primary/60" />
+														</div>
+													{/if}
+													<div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+														<div class="rounded-full bg-primary p-3 text-primary-foreground">
+															<Music size={16} />
+														</div>
+													</div>
+												</div>
+											</Lazy>
+										</TrackWrapper>
+									</ContextMenu>
+									<div class="flex flex-col">
+										<h3 class="line-clamp-1 text-sm font-medium text-foreground">{track.title}</h3>
+										<p class="line-clamp-1 text-xs text-muted-foreground">{track.artist}</p>
+									</div>
+								{:catch error}
+									<div class="aspect-square animate-pulse rounded-lg bg-secondary"></div>
+								{/await}
+							</div>
+						{/if}
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Tips Section -->
+		{#if $hideTips == false}
+			<div class="mb-8 overflow-hidden rounded-xl border bg-card shadow-md" transition:slide={{ duration: 300 }}>
+				<div class="flex items-center justify-between border-b p-4">
+					<h2 class="text-lg font-semibold text-foreground">Quick Tips</h2>
+					<Button 
+						variant="ghost" 
+						size="icon" 
+						class="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+						on:click={hideTipsPanel}
+					>
+						<X size={16} />
+					</Button>
+				</div>
+				
+				<div class="grid gap-1 p-4 sm:grid-cols-2 lg:grid-cols-3">
+					<div class="rounded-lg p-4 hover:bg-secondary/20">
+						<h3 class="mb-2 font-medium text-foreground">Search & Filter</h3>
+						<p class="mb-3 text-sm text-muted-foreground">Use the search box at the top of each page to quickly find your content, or use filters to sort by various attributes.</p>
+						<div class="flex items-center gap-2">
+							<Button variant="secondary" size="sm" class="h-8">
+								<Search size={14} class="mr-1" /> Search
+							</Button>
+							<Button variant="outline" size="sm" class="h-8">
+								<ListFilter size={14} class="mr-1" /> Filter
+							</Button>
+						</div>
+					</div>
+					
+					<div class="rounded-lg p-4 hover:bg-secondary/20">
+						<h3 class="mb-2 font-medium text-foreground">Quick Access</h3>
+						<p class="mb-3 text-sm text-muted-foreground">Press <kbd class="rounded bg-secondary/50 px-1.5 py-0.5 text-xs font-medium text-foreground">Ctrl+K</kbd> or click the search button in the top bar to quickly navigate between pages.</p>
+						<Button variant="secondary" size="sm" class="h-8" on:click={() => open = true}>
+							<Command.CommandIcon size={14} class="mr-1" /> Command Menu
+						</Button>
+					</div>
+					
+					{#if !$isSmallDevice}
+						<div class="rounded-lg p-4 hover:bg-secondary/20">
+							<h3 class="mb-2 font-medium text-foreground">Context Menus</h3>
+							<p class="mb-3 text-sm text-muted-foreground">Right-click on any song, album, or playlist to access quick actions like adding to a playlist or deleting.</p>
+							<div class="ml-1 flex h-8 items-center text-sm">
+								<span class="text-muted-foreground">Try right clicking on content</span>
+							</div>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
-{#if recentlyPlayedSongs.length > 0}
-	<div class="my-5 ml-2 mt-5 flex flex-col rounded-md md:ml-16">
-		<h2 class="text-md text-left text-xl font-black">Recently Played:</h2>
-	</div>
-	<div
-		class="my-5 ml-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 sm:gap-x-6 md:ml-16 md:grid-cols-3 md:gap-x-8 lg:grid-cols-4 lg:gap-x-10 xl:grid-cols-5 xl:gap-x-12"
-	>
-		{#each recentlyPlayedSongs as track}
-			{#if track}
-				<div class="flex flex-col items-start">
-					{#await getImageUrl(track.image) then image}
-						<ContextMenu
-							type={'track'}
-							on:delete={(e) => openAlert(track)}
-							on:addTrackToPlaylist={(e) => addTrackToPlaylist(track, e.detail.playlist)}
-						>
-							<TrackWrapper className="" {track} {tracks}>
-								<Lazy height={208} keep={true}>
-									<img class="h-44 w-44 rounded-sm md:h-52 md:w-52" src={image} alt={track.title} />
-								</Lazy>
-							</TrackWrapper>
-						</ContextMenu>
-						<div class="flex flex-row items-start">
-							<div class="mt-4 flex h-full flex-col items-start">
-								<h1 class="md:text-md p-0 text-lg font-bold leading-none text-foreground">
-									{track.title}
-								</h1>
-								<h1 class="p-0 text-sm font-light leading-none text-slate-400 md:text-base">
-									{track.artist}
-								</h1>
-							</div>
-						</div>
-					{:catch error}
-						<div class="h-52 w-52 animate-pulse rounded-sm bg-gray-500"></div>
-					{/await}
-				</div>
-			{/if}
-		{/each}
-	</div>
-{/if}
-
-{#if $hideTips == false}
-	<!-- tips -->
-	<div class="mx-4 my-4 rounded-md bg-secondary py-1">
-		<div class="ml-12 mt-5 flex flex-row items-center justify-between rounded-md">
-			<h2 class="text-md text-left text-xl font-black">Tips:</h2>
-			<Button
-				class="my-1 mr-10 h-10 w-10 px-1 md:mr-12"
-				on:click={() => hidetips()}
-				variant="destructive"
-			>
-				<X size={20} color="white" />
-			</Button>
-		</div>
-		<Lazy keep={true}>
-			<div class="mx-auto flex flex-col items-center justify-center rounded-md p-4 md:p-8">
-				<div class="mx-auto flex flex-col items-center justify-center">
-					<div class="p-5">
-						<h2 class="text-sm font-medium text-secondary-foreground">Tip #1: Filters</h2>
-						<p class="text-sm font-medium text-muted-foreground">
-							Filters allow you to organize the different sections of your library by various
-							attributes. (try it below!)
-						</p>
-						<div class="flex flex-col items-center justify-center">
-							<div class="mt-4 flex h-10 w-full justify-center">
-								{#if ascending}
-									<Button class="my-1 ml-3 h-10 w-10 px-1" on:click={() => swapAscending()}>
-										<ArrowUpAZ size={20} color="white" />
-									</Button>
-								{:else}
-									<Button class="my-1 ml-3 h-10 w-10 px-1 " on:click={() => swapAscending()}>
-										<ArrowDownZA size={20} color="white" />
-									</Button>
-								{/if}
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger asChild let:builder>
-										<Button class="my-1 ml-3 h-10 w-10 px-1" builders={[builder]}>
-											<ListFilter size={20} color="white" />
-										</Button>
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content class="w-56">
-										<DropdownMenu.Label>Sort By</DropdownMenu.Label>
-										<DropdownMenu.Separator />
-										<DropdownMenu.RadioGroup>
-											<DropdownMenu.RadioItem value="title">Title</DropdownMenu.RadioItem>
-											<DropdownMenu.RadioItem value="artist">Artist</DropdownMenu.RadioItem>
-											<DropdownMenu.RadioItem value="album">Album</DropdownMenu.RadioItem>
-											<DropdownMenu.RadioItem value="year">Year</DropdownMenu.RadioItem>
-											<DropdownMenu.RadioItem value="duration">Duration</DropdownMenu.RadioItem>
-										</DropdownMenu.RadioGroup>
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
-								<Button class="my-1 ml-3 h-10 w-10 px-1">
-									<List size={20} color="white" />
-								</Button>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div class="mx-auto flex w-full flex-col items-center justify-center md:w-[60%] lg:w-[50%]">
-					<div class="p-4 sm:p-6">
-						<h2 class="text-sm font-medium text-secondary-foreground">Tip #2: Search</h2>
-						<p class="text-xs font-medium text-muted-foreground sm:text-sm">
-							The search box is always available at the top of the screen to easily swap pages, or
-							search the content on your current page! (try it below!)
-						</p>
-						<div
-							class="border-1 mt-2 flex w-full flex-col items-center justify-center rounded-sm border"
-						>
-							<Command.Root
-								class="bg-bg border-1 w-full border-secondary-foreground sm:w-80 md:w-96"
-							>
-								<Command.Input placeholder="Search for recent items, or type a page name." />
-								<Command.List>
-									<Command.Empty>No results found.</Command.Empty>
-									<Command.Group heading="Pages">
-										<Command.Item>Home</Command.Item>
-										<Command.Item>Tracks</Command.Item>
-										<Command.Item>Albums</Command.Item>
-										<Command.Item>Playlists</Command.Item>
-										<Command.Item>Artists</Command.Item>
-										<Command.Item>Settings</Command.Item>
-									</Command.Group>
-									<Command.Separator />
-									<Command.Group heading="Tracks">
-										<Command.Item>bad guy</Command.Item>
-										<Command.Item>i want it that way</Command.Item>
-										<Command.Item>no tears left to cry</Command.Item>
-									</Command.Group>
-								</Command.List>
-							</Command.Root>
-						</div>
-					</div>
-				</div>
-				{#if !$isSmallDevice}
-					<div class="mx-auto flex flex-col items-center justify-center">
-						<div class="p-5">
-							<h2 class="text-sm font-medium text-secondary-foreground">Tip #3: Context Menus</h2>
-							<p class="text-sm font-medium text-muted-foreground">
-								Right clicking a song will bring up options, such as deleting or adding to a playlist! (try it below!)
-							</p>
-							<div class="flex flex-col items-center justify-center">
-								<ContextMenu type={'track'}>
-									<div class="mt-2 h-52 w-52 animate-pulse rounded-md bg-gray-500"></div>
-								</ContextMenu>
-							</div>
-						</div>
-					</div>
-				{/if}
-			</div></Lazy
-		>
-	</div>
-{/if}
+<Command.Dialog class="bg-background/90 backdrop-blur-sm" bind:open>
+	<Command.Input placeholder="Search for tracks, albums, artists, or navigate to a page..." />
+	<Command.List>
+		<Command.Empty>No results found.</Command.Empty>
+		<Command.Group heading="Navigation">
+			<a href="/">
+				<Command.Item>
+					<HomeIcon class="mr-2 h-4 w-4" />
+					<span>Home</span>
+				</Command.Item>
+			</a>
+			<a href="/tracks">
+				<Command.Item>
+					<Music class="mr-2 h-4 w-4" />
+					<span>Tracks</span>
+				</Command.Item>
+			</a>
+			<a href="/albums">
+				<Command.Item>
+					<ListFilter class="mr-2 h-4 w-4" />
+					<span>Albums</span>
+				</Command.Item>
+			</a>
+			<a href="/artists">
+				<Command.Item>
+					<Star class="mr-2 h-4 w-4" />
+					<span>Artists</span>
+				</Command.Item>
+			</a>
+			<a href="/playlists">
+				<Command.Item>
+					<List class="mr-2 h-4 w-4" />
+					<span>Playlists</span>
+				</Command.Item>
+			</a>
+		</Command.Group>
+		
+		{#if tracks.length > 0}
+			<Command.Separator />
+			<Command.Group heading="Recent Tracks">
+				{#each tracks.slice(0, 5) as track}
+					<TrackWrapper className="" {track} {tracks}>
+						<Command.Item>
+							<Music class="mr-2 h-4 w-4" />
+							<span>{track.title.replace(/["\[\]]/g, '')}</span>
+						</Command.Item>
+					</TrackWrapper>
+				{/each}
+			</Command.Group>
+		{/if}
+	</Command.List>
+</Command.Dialog>

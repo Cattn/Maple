@@ -8,7 +8,21 @@ export default defineConfig({
 		sveltekit(),
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
-			manifest,
+			manifest: {
+				name: manifest.name,
+				short_name: manifest.short_name,
+				description: manifest.description,
+				display: 'standalone',
+				start_url: manifest.start_url,
+				theme_color: manifest.theme_color,
+				background_color: manifest.background_color,
+				icons: manifest.icons,
+				orientation: 'portrait',
+				scope: manifest.scope,
+				id: manifest.id,
+				display_override: ['standalone', 'minimal-ui'],
+				prefer_related_applications: manifest.prefer_related_applications
+			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}'],
 				runtimeCaching: [

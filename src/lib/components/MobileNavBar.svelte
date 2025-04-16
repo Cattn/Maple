@@ -34,7 +34,9 @@
 	}
 </script>
 
-<div class="fixed bottom-0 left-0 right-0 flex h-15 items-center justify-around border-t bg-background px-2">
+<div
+	class="h-15 fixed bottom-0 left-0 right-0 flex items-center justify-around border-t bg-background px-2"
+>
 	<Button
 		class="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-transparent p-2 hover:bg-secondary"
 		href="/"
@@ -66,9 +68,13 @@
 
 {#if isMenuOpen}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" on:click={toggleMenu} transition:fade>
+	<div
+		class="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
+		on:click={toggleMenu}
+		transition:fade
+	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<div 
+		<div
 			class="fixed bottom-10 left-0 right-0 rounded-t-2xl bg-background p-4 shadow-lg"
 			transition:slide|local={{ duration: 200 }}
 		>

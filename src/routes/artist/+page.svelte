@@ -9,7 +9,7 @@
 	import type { Song } from '$lib/types/song';
 	import { ArrowDownZA, ArrowUpAZ, Check, List, ListFilter, Pencil, Trash } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-//@ts-ignore
+	//@ts-ignore
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -185,7 +185,9 @@
 								src={image}
 								alt={artist?.name?.toString() ?? ''}
 							/>
-							<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100">
+							<div
+								class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100"
+							>
 								<label
 									for="artist-image"
 									class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
@@ -233,11 +235,7 @@
 						{/if}
 					</div>
 					<div class="flex items-center gap-2">
-						<Button
-							class="h-9 w-9 p-0"
-							variant="ghost"
-							on:click={() => editMode()}
-						>
+						<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => editMode()}>
 							{#if editModeOn}
 								<Check class="h-5 w-5" />
 							{:else}
@@ -254,8 +252,8 @@
 								<AlertDialog.Header>
 									<AlertDialog.Title>Delete Artist</AlertDialog.Title>
 									<AlertDialog.Description>
-										This action cannot be undone. This will NOT delete the artist's tracks, only the artist
-										page itself.
+										This action cannot be undone. This will NOT delete the artist's tracks, only the
+										artist page itself.
 									</AlertDialog.Description>
 								</AlertDialog.Header>
 								<AlertDialog.Footer>
@@ -272,11 +270,7 @@
 
 	<div class="mb-4 flex items-center justify-between">
 		<div class="flex items-center gap-2">
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapAscending()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapAscending()}>
 				{#if ascending}
 					<ArrowUpAZ class="h-5 w-5" />
 				{:else}
@@ -285,11 +279,7 @@
 			</Button>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button
-						class="h-9 w-9 p-0"
-						variant="ghost"
-						builders={[builder]}
-					>
+					<Button class="h-9 w-9 p-0" variant="ghost" builders={[builder]}>
 						<ListFilter class="h-5 w-5" />
 					</Button>
 				</DropdownMenu.Trigger>
@@ -303,11 +293,7 @@
 					</DropdownMenu.RadioGroup>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Button
-				class="h-9 w-9 p-0"
-				variant="ghost"
-				on:click={() => swapListType()}
-			>
+			<Button class="h-9 w-9 p-0" variant="ghost" on:click={() => swapListType()}>
 				<List class="h-5 w-5" />
 			</Button>
 		</div>

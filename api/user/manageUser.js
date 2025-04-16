@@ -83,7 +83,8 @@ router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 			return res.status(404).json({ error: 'User not found' });
 		}
 
-		const updatePfpSql = 'INSERT INTO live_status (user_id, albumArt) VALUES (?, ?) ON DUPLICATE KEY UPDATE albumArt = VALUES(albumArt)';
+		const updatePfpSql =
+			'INSERT INTO live_status (user_id, albumArt) VALUES (?, ?) ON DUPLICATE KEY UPDATE albumArt = VALUES(albumArt)';
 		pool.query(updatePfpSql, [id, imageBuffer], (updateError) => {
 			if (updateError) {
 				console.error(updateError);

@@ -6,7 +6,6 @@
 	import { isLoggedIn, title } from '$lib/store';
 	import { onMount } from 'svelte';
 
-
 	let username = '';
 	let password = '';
 

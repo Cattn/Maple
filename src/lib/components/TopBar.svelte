@@ -1,214 +1,426 @@
 <script lang="ts">
-	import {
-		Music,
-		PanelRightOpen,
-		DiscAlbum,
-		ListMusic,
-		SquareUser,
-		Search,
-		AudioLines,
-		Home,
-		Settings,
-		User as UserIcon,
-		User
-	} from 'lucide-svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Command from '$lib/components/ui/command/index.js';
-	import { collapsed, SavedUser, title, isSmallDevice } from '$lib/store';
-	import { UserManager } from '$lib/api/UserManager';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { OPFS } from '$lib/opfs';
-	import type { Song } from '$lib/types/song';
-	import type { Album } from '$lib/types/album';
-	import type { Artist } from '$lib/types/artist';
-	import type { Playlist } from '$lib/types/playlist';
-	import { page } from '$app/stores';
-	import TrackWrapper from './TrackWrapper.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Tooltip from "$lib/components/ui/tooltip";
+	import { fade } from 'svelte/transition';
+	import { browser } from '$app/environment';
+	import { writable } from 'svelte/store';
+	
+	import {
+		Bell,
+		Search,
+		Menu,
+		X,
+		MessageSquare,
+		Settings,
+		User,
+		LogOut,
+		Moon,
+		Sun,
+		ChevronLeft
+	} from 'lucide-svelte';
+	
+	import Button from './ui/button/button.svelte';
+	import {
+		DropdownMenu,
+		DropdownMenuContent,
+		DropdownMenuItem,
+		DropdownMenuLabel,
+		DropdownMenuSeparator,
+		DropdownMenuTrigger
+	} from '$lib/components/ui/dropdown-menu/index.js';
+	
+	// Create theme store
+	const currentTheme = writable('dark');
+	
+	// Mock user manager
+	const userManager = {
+		logout: () => {
+			// Placeholder for actual logout functionality
+			console.log('User logged out');
+		}
+	};
 
-	let songs: Song[] = [];
-	let albums: Album[] = [];
-	let artists: Artist[] = [];
-	let playlists: Playlist[] = [];
-	let open = false;
-
-	onMount(async () => {
-		songs = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-		albums = (await OPFS.get().albums()).sort((a, b) =>
-			a.name.toString().localeCompare(b.name.toString())
-		);
-		artists = (await OPFS.get().artists()).sort((a, b) => a.name.localeCompare(b.name));
-		playlists = await OPFS.get().playlists();
+	// Add props for sidebar
+	export let sidebarOpen = true;
+	export let toggleSidebar: () => void;
+	
+	let searchQuery = '';
+	let showSearch = false;
+	let notificationCount = 0;
+	let messageCount = 0;
+	let username = '';
+	let profilePicture = '';
+	
+	onMount(() => {
+		if (browser) {
+			// Initialize theme from local storage if available
+			const savedTheme = localStorage.getItem('theme');
+			if (savedTheme) {
+				currentTheme.set(savedTheme);
+			}
+		}
 	});
+	
+	function handleSearch() {
+		if (searchQuery) {
+			goto(`/search?q=${encodeURIComponent(searchQuery)}`);
+			searchQuery = '';
+			showSearch = false;
+		}
+	}
+	
+	function toggleSearchBar() {
+		showSearch = !showSearch;
+		if (!showSearch) {
+			searchQuery = '';
+		}
+	}
+	
+	function logout() {
+		// Implement logout functionality
+		userManager.logout();
+		goto('/login');
+	}
+	
+	function goToProfile() {
+		goto('/settings');
+	}
+	
+	function goToSettings() {
+		goto('/settings');
+	}
+	
+	function goToNotifications() {
+		goto('/notifications');
+	}
+	
+	function goToMessages() {
+		goto('/messages');
+	}
+	
+	function toggleTheme() {
+		currentTheme.update(theme => {
+			const newTheme = theme === 'dark' ? 'light' : 'dark';
+			if (browser) {
+				localStorage.setItem('theme', newTheme);
+			}
+			return newTheme;
+		});
+	}
 </script>
 
-<div class="relative flex items-center justify-between">
-	<div class="flex items-center">
-		<Tooltip.Root>
-			<Button
-				class="my-1 w-fit ml-1 bg-transparent px-4 hover:bg-secondary"
-				href="/"
-			>
-				<Home size={22} class="text-foreground" />
-				{#if $collapsed}
-					<h1 class="hidden px-1 text-foreground md:block">Home</h1>
+<header class="topbar bg-card/80 backdrop-blur-lg border-b border-border/50 shadow-sm">
+	<div class="topbar-container">
+		<!-- Mobile menu toggle and sidebar toggle -->
+		<div class="topbar-start">
+			<Button variant="ghost" size="icon" class="sidebar-toggle-button" on:click={toggleSidebar}>
+				{#if sidebarOpen}
+					<ChevronLeft size={20} />
+				{:else}
+					<Menu size={20} />
 				{/if}
 			</Button>
-		  </Tooltip.Root>
-		<h1 class="ml-2 text-xl font-bold text-muted-foreground">{$title}</h1>
-	</div>
-	<div class="absolute left-1/2 -translate-x-1/2 transform">
-		<Button
-			on:click={() => (open = !open)}
-			class="my-2 h-8 max-w-xs text-primary"
-			variant="outline"
-		>
-			<Search size={20} color="white" />
-			<span class="ml-2">Search</span>
-		</Button>
-	</div>
-	<div>
-		{#if $SavedUser.id}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class="mt-1">
-					{#if $SavedUser.pfp !== null && $SavedUser.pfp !== undefined}
-						<!-- svelte-ignore a11y-img-redundant-alt -->
-						<img
-							src={$SavedUser.pfp}
-							alt="Profile Picture"
-							class="mr-2 h-8 w-8 self-center rounded-[50%]"
-						/>
-					{:else}
-						<UserIcon color="black" class="mr-2 h-8 w-8 self-center rounded-[50%] bg-primary p-1" />
-					{/if}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					<DropdownMenu.Group>
-						<DropdownMenu.Label>My Account</DropdownMenu.Label>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item href="/account">Manage Account</DropdownMenu.Item>
-						<DropdownMenu.Item href="/account/preferences">Preferences</DropdownMenu.Item>
-						<DropdownMenu.Item class="bg-red-500 text-black" on:click={() => UserManager.logOut()}
-							>Log Out</DropdownMenu.Item
+			
+			<!-- App title/logo (visible on larger screens when search is not active) -->
+			<div class="app-title hidden md:flex {showSearch ? 'md:hidden' : ''}">
+				<h1 class="text-xl font-bold">UMLA</h1>
+			</div>
+		</div>
+		
+		<!-- Search bar (expandable on mobile) -->
+		<div class="topbar-center">
+			{#if showSearch}
+				<div class="search-container" in:fade={{ duration: 200 }}>
+					<form on:submit|preventDefault={handleSearch} class="search-form">
+						<div class="search-input-wrapper">
+							<Search size={18} class="search-icon" />
+							<input
+								type="text"
+								bind:value={searchQuery}
+								placeholder="Search..."
+								class="search-input"
+								autofocus
+							/>
+						</div>
+						<Button 
+							type="submit" 
+							variant="ghost" 
+							size="icon" 
+							class="search-close-button"
+							on:click={toggleSearchBar}
 						>
-					</DropdownMenu.Group>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		{:else}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger class="mt-1"
-					><UserIcon
-						color="black"
-						class="mr-2 h-8 w-8 self-center rounded-[50%] bg-primary p-1"
-					/></DropdownMenu.Trigger
-				>
-				<DropdownMenu.Content>
-					<DropdownMenu.Group>
-						<DropdownMenu.Label>My Account</DropdownMenu.Label>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item href="/account/register">Sign up</DropdownMenu.Item>
-						<DropdownMenu.Item href="/account/login">Login</DropdownMenu.Item>
-					</DropdownMenu.Group>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		{/if}
+							<X size={18} />
+						</Button>
+					</form>
+				</div>
+			{:else}
+				<div class="hidden md:block">
+					<form on:submit|preventDefault={handleSearch} class="search-form-compact">
+						<div class="search-input-wrapper-compact">
+							<Search size={16} class="search-icon" />
+							<input
+								type="text"
+								bind:value={searchQuery}
+								placeholder="Search..."
+								class="search-input-compact"
+							/>
+						</div>
+					</form>
+				</div>
+			{/if}
+		</div>
+		
+		<!-- User actions -->
+		<div class="topbar-end">
+			<!-- Search button (mobile only) -->
+			<Button variant="ghost" size="icon" class="action-button md:hidden" on:click={toggleSearchBar}>
+				<Search size={20} />
+			</Button>
+			
+			<!-- Theme toggle -->
+			<Button variant="ghost" size="icon" class="action-button" on:click={toggleTheme}>
+				{#if $currentTheme === 'dark'}
+					<Sun size={20} />
+				{:else}
+					<Moon size={20} />
+				{/if}
+			</Button>
+			
+			<!-- Notifications -->
+			<Button variant="ghost" size="icon" class="action-button" on:click={goToNotifications}>
+				<div class="indicator">
+					<Bell size={20} />
+					{#if notificationCount > 0}
+						<span class="indicator-badge">{notificationCount > 9 ? '9+' : notificationCount}</span>
+					{/if}
+				</div>
+			</Button>
+			
+			<!-- Messages -->
+			<Button variant="ghost" size="icon" class="action-button" on:click={goToMessages}>
+				<div class="indicator">
+					<MessageSquare size={20} />
+					{#if messageCount > 0}
+						<span class="indicator-badge">{messageCount > 9 ? '9+' : messageCount}</span>
+					{/if}
+				</div>
+			</Button>
+			
+			<!-- User dropdown -->
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="ghost" size="icon" class="user-button">
+						{#if profilePicture}
+							<img src={profilePicture} alt={username} class="user-avatar" />
+						{:else}
+							<div class="user-avatar-placeholder">
+								<User size={16} />
+							</div>
+						{/if}
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end">
+					<DropdownMenuLabel>
+						<div class="user-info">
+							<p class="user-name">{username || 'User'}</p>
+							<p class="user-email">user@example.com</p>
+						</div>
+					</DropdownMenuLabel>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem on:click={goToProfile}>
+						<User size={16} class="mr-2" />
+						Profile
+					</DropdownMenuItem>
+					<DropdownMenuItem on:click={goToSettings}>
+						<Settings size={16} class="mr-2" />
+						Settings
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem on:click={logout}>
+						<LogOut size={16} class="mr-2" />
+						Logout
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</div>
 	</div>
-</div>
+</header>
 
-<Command.Dialog class="bg-background" bind:open loop>
-	<Command.Input placeholder="Search for recent items, or type a page name." />
-	<Command.List>
-		<Command.Empty>No results found.</Command.Empty>
-		<Command.Group heading="Go To">
-			<a class="pointer" href="/">
-				<Command.Item>
-					<Home class="mr-2 h-4 w-4" />
-					<span>Home</span>
-				</Command.Item>
-			</a>
-			<a class="pointer" href="/tracks">
-				<Command.Item>
-					<AudioLines class="mr-2 h-4 w-4" />
-					<span>Tracks</span>
-				</Command.Item>
-			</a>
-			<a class="pointer" href="/albums">
-				<Command.Item>
-					<DiscAlbum class="mr-2 h-4 w-4" />
-					<span>Albums</span>
-				</Command.Item>
-			</a>
-			<a class="pointer" href="/artists">
-				<Command.Item>
-					<SquareUser class="mr-2 h-4 w-4" />
-					<span>Artists</span>
-				</Command.Item>
-			</a>
-			<a class="pointer" href="/playlists">
-				<Command.Item>
-					<ListMusic class="mr-2 h-4 w-4" />
-					<span>Playlists</span>
-				</Command.Item>
-			</a>
-			<a class="pointer" href="/settings">
-				<Command.Item>
-					<Settings class="mr-2 h-4 w-4" />
-					<span>Settings</span>
-				</Command.Item>
-			</a>
-		</Command.Group>
-		<Command.Separator />
-		{#if $page.url.pathname == '/tracks'}
-			<Command.Group heading="Tracks">
-				{#each songs as track}
-					<TrackWrapper className="" {track} tracks={songs}>
-						<Command.Item>
-							<DiscAlbum class="mr-2 h-4 w-4" />
-							<span>{track.title.replace(/["\[\]]/g, '')}</span>
-						</Command.Item>
-					</TrackWrapper>
-				{/each}
-			</Command.Group>
-			<Command.Separator />
-		{/if}
-		{#if $page.url.pathname == '/albums'}
-			<Command.Group heading="Albums">
-				{#each albums as album}
-					<a class="pointer" href={`/album?album=${album.id}`}>
-						<Command.Item>
-							<DiscAlbum class="mr-2 h-4 w-4" />
-							<span>{album.name.replace(/["\[\]]/g, '')}</span>
-						</Command.Item>
-					</a>
-				{/each}
-			</Command.Group>
-			<Command.Separator />
-		{/if}
-		{#if $page.url.pathname == '/artists'}
-			<Command.Group heading="Artists">
-				{#each artists as artist}
-					<a class="pointer" href={`/artist?artist=${artist.id}`}>
-						<Command.Item>
-							<SquareUser class="mr-2 h-4 w-4" />
-							<span>{artist.name.replace(/["\[\]]/g, '')}</span>
-						</Command.Item>
-					</a>
-				{/each}
-			</Command.Group>
-			<Command.Separator />
-		{/if}
-		{#if $page.url.pathname == '/playlists'}
-			<Command.Group heading="Playlists">
-				{#each playlists as playlist}
-					<a class="pointer" href={`/playlist?playlist=${playlist.id}`}>
-						<Command.Item>
-							<ListMusic class="mr-2 h-4 w-4" />
-							<span>{playlist.name.replace(/["\[\]]/g, '')}</span>
-						</Command.Item>
-					</a>
-				{/each}
-			</Command.Group>
-		{/if}
-	</Command.List>
-</Command.Dialog>
+<style>
+	.topbar {
+		position: sticky;
+		top: 0;
+		width: 100%;
+		height: 60px;
+		z-index: 40;
+	}
+	
+	.topbar-container {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		height: 100%;
+		padding: 0 1rem;
+	}
+	
+	.topbar-start {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	
+	.app-title {
+		margin-left: 0.5rem;
+	}
+
+	.sidebar-toggle-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	.topbar-center {
+		flex: 1;
+		display: flex;
+		justify-content: center;
+		max-width: 600px;
+	}
+	
+	.search-container {
+		width: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		padding: 0.75rem 1rem;
+		background-color: hsl(var(--card));
+		border-bottom: 1px solid hsl(var(--border));
+		z-index: 45;
+	}
+	
+	.search-form {
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+	
+	.search-input-wrapper {
+		display: flex;
+		align-items: center;
+		flex: 1;
+		background-color: hsl(var(--muted));
+		border-radius: 0.5rem;
+		padding: 0.5rem 1rem;
+	}
+	
+	.search-icon {
+		color: hsl(var(--muted-foreground));
+		margin-right: 0.5rem;
+	}
+	
+	.search-input {
+		flex: 1;
+		background: transparent;
+		border: none;
+		outline: none;
+		color: hsl(var(--foreground));
+		font-size: 0.875rem;
+	}
+	
+	.search-close-button {
+		margin-left: 0.5rem;
+	}
+	
+	.search-form-compact {
+		width: 100%;
+		max-width: 400px;
+	}
+	
+	.search-input-wrapper-compact {
+		display: flex;
+		align-items: center;
+		background-color: hsl(var(--muted));
+		border-radius: 0.5rem;
+		padding: 0.375rem 0.75rem;
+	}
+	
+	.search-input-compact {
+		flex: 1;
+		background: transparent;
+		border: none;
+		outline: none;
+		color: hsl(var(--foreground));
+		font-size: 0.875rem;
+		width: 250px;
+	}
+	
+	.topbar-end {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	
+	.action-button {
+		width: 40px;
+		height: 40px;
+		position: relative;
+	}
+	
+	.indicator {
+		position: relative;
+	}
+	
+	.indicator-badge {
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		background-color: hsl(var(--destructive));
+		color: hsl(var(--destructive-foreground));
+		border-radius: 9999px;
+		font-size: 0.6rem;
+		font-weight: 600;
+	}
+	
+	.user-button {
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		border-radius: 9999px;
+		overflow: hidden;
+	}
+	
+	.user-avatar {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	
+	.user-avatar-placeholder {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: hsl(var(--muted));
+		color: hsl(var(--muted-foreground));
+	}
+	
+	.user-info {
+		margin: -0.5rem 0;
+	}
+	
+	.user-name {
+		font-weight: 600;
+		font-size: 0.875rem;
+	}
+	
+	.user-email {
+		font-size: 0.75rem;
+		color: hsl(var(--muted-foreground));
+	}
+</style>

@@ -1,5 +1,5 @@
 const express = require('express');
-const rateLimit = require("express-rate-limit");
+const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const login = require('./auth/login');
 const getPath = require('./get/get.js');
@@ -32,24 +32,24 @@ var options = {
 		try {
 			if (!req || !req.headers || !req.headers.cookie) {
 				console.log('[PEER] No request object or cookies found, generating random ID');
-				return (Math.random().toString(36) + "0000000000000000000").substr(2, 16);
+				return (Math.random().toString(36) + '0000000000000000000').substr(2, 16);
 			}
-			
+
 			const cookieString = req.headers.cookie;
 			const cookies = cookieString.split(';');
-			const tokenCookie = cookies.find(cookie => cookie.trim().startsWith('token='));
+			const tokenCookie = cookies.find((cookie) => cookie.trim().startsWith('token='));
 			if (!tokenCookie) {
 				console.log('[PEER] No token cookie found, generating random ID');
-				return (Math.random().toString(36) + "0000000000000000000").substr(2, 16);
+				return (Math.random().toString(36) + '0000000000000000000').substr(2, 16);
 			}
-			
+
 			const token = tokenCookie.split('=')[1];
 			const decoded = jwt.verify(token, process.env.TOKEN_SECRET);
 			return decoded.id;
 		} catch (error) {
 			console.error('[ERROR] Failed to generate PeerJS client ID:', error);
 			// Generate a random ID as fallback
-			return (Math.random().toString(36) + "0000000000000000000").substr(2, 16);
+			return (Math.random().toString(36) + '0000000000000000000').substr(2, 16);
 		}
 	}
 };
@@ -110,13 +110,13 @@ try {
 			if (!cookieString) {
 				return res.status(401).json({ error: 'No cookies found' });
 			}
-			
+
 			const cookies = cookieString.split(';');
-			const tokenCookie = cookies.find(cookie => cookie.trim().startsWith('token='));
+			const tokenCookie = cookies.find((cookie) => cookie.trim().startsWith('token='));
 			if (!tokenCookie) {
 				return res.status(401).json({ error: 'No token found' });
 			}
-			
+
 			const token = tokenCookie.split('=')[1];
 			const decoded = jwt.verify(token, process.env.TOKEN_SECRET);
 			return res.json({ id: decoded.id });
@@ -182,7 +182,7 @@ try {
 
 		client.on('nowPlaying', async (data) => {
 			const id = client.user.id;
-			
+
 			const sql = 'SELECT * FROM friends_db WHERE user_id = ? OR friend_id = ?';
 
 			try {
@@ -231,7 +231,6 @@ try {
 		console.log('[14] Server is running on port 3000');
 		console.log('[DONE] Server initialization complete');
 	});
-
 } catch (error) {
 	console.error('[FATAL] Error during server startup:', error);
 	process.exit(1);

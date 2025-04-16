@@ -12,16 +12,14 @@ export const socketManager = () => {
 		socket?.on('friendRequest', async (data) => {
 			const id = data.id;
 			const friend = await UserManager.getUserbyId(id);
-			toast.success('Friend request from: ' + friend.name + ' (' + friend.username + ')',
-				{
-					action: {
-						label: 'Accept',
-						onClick: () => {
-							UserManager.acceptRequest(id);
-						}
-					},
+			toast.success('Friend request from: ' + friend.name + ' (' + friend.username + ')', {
+				action: {
+					label: 'Accept',
+					onClick: () => {
+						UserManager.acceptRequest(id);
+					}
 				}
-			);
+			});
 			refreshRequests();
 		});
 

@@ -37,7 +37,9 @@
 </script>
 
 {#if track}
-	<div class="group relative flex flex-col items-start transition-all duration-200 hover:scale-[1.02]">
+	<div
+		class="group relative flex flex-col items-start transition-all duration-200 hover:scale-[1.02]"
+	>
 		{#await getImageUrl(track.image) then image}
 			<ContextMenu
 				type={'track'}
@@ -46,19 +48,23 @@
 			>
 				<TrackWrapper className="w-full" {track} {tracks}>
 					<Lazy height={208} keep={true}>
-						<img 
-							class="h-44 w-44 rounded-lg object-cover shadow-lg transition-all duration-300 group-hover:shadow-xl md:h-52 md:w-52" 
-							src={image} 
-							alt={track.title} 
+						<img
+							class="h-44 w-44 rounded-lg object-cover shadow-lg transition-all duration-300 group-hover:shadow-xl md:h-52 md:w-52"
+							src={image}
+							alt={track.title}
 						/>
 					</Lazy>
 				</TrackWrapper>
 			</ContextMenu>
 			<div class="mt-3 flex w-full flex-col items-start space-y-1">
-				<h1 class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg">
+				<h1
+					class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg"
+				>
 					{track.title}
 				</h1>
-				<h1 class="line-clamp-1 w-full text-sm font-normal leading-tight text-muted-foreground md:text-base">
+				<h1
+					class="line-clamp-1 w-full text-sm font-normal leading-tight text-muted-foreground md:text-base"
+				>
 					{track.artist}
 				</h1>
 			</div>

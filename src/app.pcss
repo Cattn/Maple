@@ -4,26 +4,26 @@
 
 @layer base {
 	:root {
-		--background: 0 17% 8%;
-		--foreground: 0 16% 91%;
-		--card: 0 17% 8%;
-		--card-foreground: 0 16% 91%;
-		--popover: 0 17% 8%;
-		--popover-foreground: 0 16% 91%;
-		--primary: 3 16% 73%;
-		--primary-foreground: 0 17% 8%;
-		--secondary: 30 16% 31%;
-		--secondary-foreground: 0 16% 91%;
-		--muted: 0 18% 80%;
-		--muted-foreground: 0 16% 91%;
-		--accent: 35 17% 57%;
-		--accent-foreground: 0 17% 8%;
+		--background: 224 71% 4%;
+		--foreground: 213 31% 91%;
+		--card: 224 71% 4%;
+		--card-foreground: 213 31% 91%;
+		--popover: 224 71% 4%;
+		--popover-foreground: 213 31% 91%;
+		--primary: 262 83% 58%;
+		--primary-foreground: 210 40% 98%;
+		--secondary: 222 47% 11%;
+		--secondary-foreground: 210 40% 98%;
+		--muted: 223 47% 11%;
+		--muted-foreground: 215 20% 65%;
+		--accent: 262 83% 58%;
+		--accent-foreground: 210 40% 98%;
 		--destructive: 0 62% 30%;
-		--destructive-foreground: 0 18% 10%;
-		--border: 0 17% 60%;
-		--input: 0 18% 80%;
-		--ring: 35 17% 60%;
-		--radius: 0.5rem;
+		--destructive-foreground: 210 40% 98%;
+		--border: 216 34% 17%;
+		--input: 216 34% 17%;
+		--ring: 263 75% 63%;
+		--radius: 0.75rem;
 	}
 }
 @layer base {
@@ -41,16 +41,16 @@
 
 	.scrollbar::-webkit-scrollbar-track {
 		border-radius: 100vh;
-		background: #1e1e1e;
+		background: hsl(var(--secondary));
 	}
 
 	.scrollbar::-webkit-scrollbar-thumb {
-		background: #333;
+		background: hsl(var(--muted-foreground) / 0.4);
 		border-radius: 100vh;
 	}
 
 	.scrollbar::-webkit-scrollbar-thumb:hover {
-		background: #444;
+		background: hsl(var(--muted-foreground) / 0.6);
 	}
 }
 
@@ -77,6 +77,46 @@
 	.pr-safe {
 		padding-right: env(safe-area-inset-right);
 	}
+
+	.glass-effect {
+		@apply border border-white/5 bg-secondary/60 backdrop-blur-lg;
+	}
+
+	.hover-scale {
+		@apply transition-transform duration-300 hover:scale-[1.03];
+	}
+
+	.animate-fade-in {
+		@apply opacity-0 transition-opacity duration-500;
+		animation: fadeIn 0.5s ease forwards;
+	}
+
+	.animate-slide-up {
+		@apply translate-y-4 transform opacity-0 transition-all duration-500;
+		animation: slideUp 0.5s ease forwards;
+	}
+
+	.track-backdrop {
+		@apply relative overflow-hidden;
+	}
+
+	.track-backdrop::after {
+		content: '';
+		@apply pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent;
+	}
+
+	@keyframes fadeIn {
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes slideUp {
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
 }
 
 @media (display-mode: standalone) {
@@ -91,3 +131,5 @@
 		user-select: none;
 	}
 }
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

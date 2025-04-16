@@ -8,13 +8,14 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { isSmallDevice } from '$lib/store';
 	import Button from '../ui/button/button.svelte';
-	import { EllipsisVertical } from 'lucide-svelte';
-
+	import { EllipsisVertical, Heart, Play } from 'lucide-svelte';
+	import { slide, fade } from 'svelte/transition';
 	import { createEventDispatcher } from 'svelte';
 	import type { Playlist } from '$lib/types/playlist';
+
 	const dispatch = createEventDispatcher();
 
-	async function getImageUrl(imagePath: string): Promise<string> { 
+	async function getImageUrl(imagePath: string): Promise<string> {
 		const response = await OPFS.get().image(imagePath);
 		const arrayBuffer = await response.arrayBuffer();
 		const blob = new Blob([arrayBuffer]);
@@ -50,57 +51,84 @@
 		const seconds = roundedDuration % 60;
 		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 	}
+
+	let isHovered = false;
 </script>
 
 {#if track}
-	<div class="group flex w-full items-center rounded-lg p-2 transition-colors hover:bg-secondary/50">
+	<div
+		class="group relative mb-2 flex w-full items-center rounded-xl p-2 transition-all duration-200 hover:bg-secondary/30"
+		on:mouseenter={() => (isHovered = true)}
+		on:mouseleave={() => (isHovered = false)}
+	>
 		<TrackWrapper className="flex-grow" {track} {tracks}>
 			<div class="flex w-full items-center gap-4">
-				<div class="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-md md:h-16 md:w-16">
+				<div class="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg md:h-14 md:w-14">
 					{#await getImageUrl(track.image) then image}
-						<Lazy height={64} {keep}>
-							<img 
-								class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" 
-								src={image} 
-								alt={track.title} 
+						<Lazy height={56} {keep}>
+							<img
+								class="h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
+								src={image}
+								alt={track.title}
 							/>
+							<div
+								class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+							>
+								<div class="flex rounded-full bg-primary/90 p-2 text-white shadow-lg">
+									<Play size={16} />
+								</div>
+							</div>
 						</Lazy>
 					{:catch error}
-						<div class="h-full w-full animate-pulse rounded-md bg-muted"></div>
+						<div class="h-full w-full animate-pulse rounded-lg bg-muted"></div>
 					{/await}
 				</div>
 				<div class="flex min-w-0 flex-1 flex-col">
-					<h1 class="line-clamp-1 text-base font-semibold text-foreground transition-colors group-hover:text-primary">
+					<h1
+						class="line-clamp-1 text-base font-medium text-foreground transition-colors duration-300 group-hover:text-primary"
+					>
 						{track.title}
 					</h1>
-					<h1 class="line-clamp-1 text-sm text-muted-foreground">
-						{track.artist}
-					</h1>
-				</div>
-				{#if !$isSmallDevice}
-					<div class="hidden flex-1 items-center justify-end gap-6 text-right md:flex">
-						<div class="flex items-center gap-4 text-xs text-muted-foreground/70">
-							<span>{formatDuration(track.duration)}</span>
-							<span class="text-muted-foreground/50">•</span>
-							<span>{track.album}</span>
-							<span class="text-muted-foreground/50">•</span>
-							<span>{track.year}</span>
-						</div>
+					<div class="flex items-center">
+						<h2 class="line-clamp-1 text-sm text-muted-foreground">
+							{track.artist}
+						</h2>
+						{#if !$isSmallDevice}
+							<span class="mx-2 text-xs text-muted-foreground/40">•</span>
+							<h3 class="text-xs text-muted-foreground/60">
+								{track.album}
+							</h3>
+						{/if}
 					</div>
-				{/if}
+				</div>
+
+				<div class="hidden items-center gap-3 md:flex">
+					{#if isHovered}
+						<button
+							class="glass-effect flex h-8 w-8 items-center justify-center rounded-full opacity-80 transition-opacity duration-300 hover:opacity-100"
+							transition:fade={{ duration: 200 }}
+						>
+							<Heart size={16} class="text-muted-foreground hover:text-primary" />
+						</button>
+					{/if}
+					<div class="text-xs text-muted-foreground/70">
+						{formatDuration(track.duration)}
+					</div>
+				</div>
 			</div>
 		</TrackWrapper>
+
 		<div class="ml-2 flex items-center">
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button 
-						class="h-8 w-8 bg-transparent p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-secondary" 
+					<Button
+						class="h-8 w-8 bg-transparent p-0 opacity-60 transition-opacity duration-300 hover:bg-secondary/80 group-hover:opacity-100"
 						builders={[builder]}
 					>
-						<EllipsisVertical size={18} class="text-muted-foreground" />
+						<EllipsisVertical size={16} class="text-muted-foreground" />
 					</Button>
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content class="w-56">
+				<DropdownMenu.Content class="glass-effect w-56">
 					<DropdownMenu.Label>Options</DropdownMenu.Label>
 					<DropdownMenu.Separator />
 					<DropdownMenu.Item on:click={() => openAlert(track)}>Delete</DropdownMenu.Item>
@@ -108,7 +136,7 @@
 						<DropdownMenu.SubTrigger>
 							<span>Add to Playlist</span>
 						</DropdownMenu.SubTrigger>
-						<DropdownMenu.SubContent side="left">
+						<DropdownMenu.SubContent side="left" class="glass-effect">
 							{#if playlists.length > 0}
 								{#each playlists as playlist}
 									<DropdownMenu.Item on:click={() => addTrackToPlaylist(track, playlist)}>

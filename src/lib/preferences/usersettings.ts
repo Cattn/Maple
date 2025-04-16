@@ -4,7 +4,8 @@ let webhookURL = '';
 
 let webhookSettings = new Settings('webhook');
 
-webhookEnabled = webhookSettings.get('enabled') !== null ? webhookSettings.get('enabled') : webhookEnabled;
+webhookEnabled =
+	webhookSettings.get('enabled') !== null ? webhookSettings.get('enabled') : webhookEnabled;
 webhookURL = webhookSettings.get('url') !== null ? webhookSettings.get('url') : webhookURL;
 
 let discord = false;
@@ -20,7 +21,8 @@ let socket = true;
 let preferences = new Settings('preferences');
 p2p = preferences.get('p2p') !== null ? preferences.get('p2p') : p2p;
 devMode = preferences.get('devMode') !== null ? preferences.get('devMode') : devMode;
-showLogging = preferences.get('showLogging') !== null ? preferences.get('showLogging') : showLogging;
+showLogging =
+	preferences.get('showLogging') !== null ? preferences.get('showLogging') : showLogging;
 socket = preferences.get('socket') !== null ? preferences.get('socket') : socket;
 
 const UserSettings = {
@@ -32,7 +34,7 @@ const UserSettings = {
 		p2p,
 		devMode,
 		showLogging,
-		socket,
+		socket
 	},
 	discord: {
 		enabled: discord

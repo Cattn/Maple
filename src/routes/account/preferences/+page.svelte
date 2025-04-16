@@ -44,9 +44,7 @@
 	{#if !$isLoggedIn}
 		<div class="flex flex-col items-center justify-center space-y-4">
 			<h1 class="text-2xl font-semibold">You are not logged in!</h1>
-			<Button href="/account/login" variant="secondary">
-				Login
-			</Button>
+			<Button href="/account/login" variant="secondary">Login</Button>
 		</div>
 	{:else}
 		<div class="mb-4 text-center">
@@ -57,7 +55,7 @@
 		<div class="grid gap-4">
 			<div class="rounded-lg border bg-card p-6 shadow-sm">
 				<h1 class="mb-6 text-xl font-bold">Webhook Settings</h1>
-				
+
 				<div class="space-y-6">
 					<div class="flex items-center justify-between rounded-lg bg-background">
 						<div class="space-y-0.5">
@@ -76,7 +74,8 @@
 							class="w-full"
 						/>
 						<p class="text-sm text-muted-foreground">
-							Webhook URL to automatically send to. Currently supports Discord webhooks. If left blank, nothing will be sent.
+							Webhook URL to automatically send to. Currently supports Discord webhooks. If left
+							blank, nothing will be sent.
 						</p>
 					</div>
 				</div>
@@ -84,7 +83,7 @@
 
 			<div class="rounded-lg border bg-card p-6 shadow-sm">
 				<h1 class="mb-6 text-xl font-bold">Discord Settings</h1>
-				
+
 				<div class="space-y-6">
 					<div class="flex items-center justify-between rounded-lg bg-background">
 						<div class="space-y-0.5">
@@ -97,9 +96,7 @@
 			</div>
 
 			<div class="flex justify-center">
-				<Button on:click={updateSettings} class="w-full sm:w-auto">
-					Save Preferences
-				</Button>
+				<Button on:click={updateSettings} class="w-full sm:w-auto">Save Preferences</Button>
 			</div>
 		</div>
 	{/if}

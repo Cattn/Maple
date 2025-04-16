@@ -12,9 +12,18 @@
 	import { Toaster } from '$lib/components/ui/sonner';
 	import UserSettings from '$lib/preferences/usersettings';
 	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
-	import { collapsed, isLoggedIn, isSmallDevice, loadPreferencesStore, socket, title, UserInfo } from '$lib/store';
+	import {
+		collapsed,
+		isLoggedIn,
+		isSmallDevice,
+		loadPreferencesStore,
+		socket,
+		title,
+		UserInfo
+	} from '$lib/store';
 	import { io } from 'socket.io-client';
 	import { onMount } from 'svelte';
+	import { writable } from 'svelte/store';
 	import '../app.pcss';
 	import { socketManager } from '../lib/socketManager';
 	//@ts-ignore
@@ -34,21 +43,30 @@
 				// need to add a toast to the user that the app is ready to work offline
 			},
 			onRegistered(r: ServiceWorkerRegistration) {
-				r && setInterval(() => {
-					r.update();
-				}, intervalMS);
+				r &&
+					setInterval(() => {
+						r.update();
+					}, intervalMS);
 			}
 		});
 	}
 
 	let isPWA = false;
 	if (browser) {
-		isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-				window.matchMedia('(display-mode: minimal-ui)').matches;
+		isPWA =
+			window.matchMedia('(display-mode: standalone)').matches ||
+			window.matchMedia('(display-mode: minimal-ui)').matches;
 	}
 
 	async function getUserData() {
 		await UserManager.getUser();
+	}
+
+	// Create a writable store for sidebar state
+	const sidebarOpen = writable(true);
+
+	function toggleSidebar() {
+		sidebarOpen.update(state => !state);
 	}
 
 	onMount(async () => {
@@ -118,7 +136,7 @@
 	{#if $page.url.pathname !== '/account/login' && $page.url.pathname !== '/account' && $page.url.pathname !== '/account/register' && $page.url.pathname !== '/account/preferences'}
 		{#if !smallDevice}
 			<div class="sticky top-0 z-10 border-b bg-background" class:pt-safe={isPWA}>
-				<TopBar />
+				<TopBar {toggleSidebar} sidebarOpen={$sidebarOpen} />
 			</div>
 		{:else}
 			<div class="fixed inset-x-0 top-0 z-10 border-b bg-background" class:pt-safe={isPWA}>
@@ -127,15 +145,9 @@
 		{/if}
 		<div class="flex flex-1 overflow-hidden">
 			{#if !smallDevice}
-				{#if $collapsed}
-					<div class="border-1 w-16 flex-none border-r transition-all duration-500 sm:w-36 md:w-36">
-						<SideBar />
-					</div>
-				{:else}
-					<div class="border-1 w-16 flex-none border-r transition-all duration-500 sm:w-16 md:w-16">
-						<SideBar />
-					</div>
-				{/if}
+				<div class="flex-none transition-all duration-300" class:w-60={$sidebarOpen} class:w-16={!$sidebarOpen}>
+					<SideBar open={$sidebarOpen} {toggleSidebar} />
+				</div>
 			{/if}
 			{#if !smallDevice}
 				<div class="scrollbar flex-1 overflow-auto">

@@ -4,7 +4,7 @@ const pool = require('../db');
 module.exports = {
 	addFriend: function (user, friend, socket, io) {
 		try {
-		io.to(socket.id).emit('friendRequest', { id: user });
+			io.to(socket.id).emit('friendRequest', { id: user });
 		} catch (error) {
 			console.error(error);
 		}
@@ -27,17 +27,19 @@ module.exports = {
 
 	nowPlaying: function (user, friends, io, nowPlaying) {
 		try {
-			pool.promise().query(
-				'INSERT INTO live_status (user_id, playing) VALUES (?, ?) ' +
-				'ON DUPLICATE KEY UPDATE playing = VALUES(playing)',
-				[user, JSON.stringify(nowPlaying)]
-			);
+			pool
+				.promise()
+				.query(
+					'INSERT INTO live_status (user_id, playing) VALUES (?, ?) ' +
+						'ON DUPLICATE KEY UPDATE playing = VALUES(playing)',
+					[user, JSON.stringify(nowPlaying)]
+				);
 			friends.forEach(async (friend) => {
-				const client = await this.getSocket(io, friend.friend_id)
+				const client = await this.getSocket(io, friend.friend_id);
 				if (client) {
 					io.to(client.id).emit('nowPlaying', { nowPlaying: nowPlaying, id: user });
 				}
-			})
+			});
 		} catch (error) {
 			console.error(error);
 		}
@@ -57,21 +59,21 @@ module.exports = {
 				artist: nowPlaying.artist || undefined,
 				title: nowPlaying.title || undefined,
 				state: nowPlaying.artist ? `by ${nowPlaying.artist}` : undefined,
-				largeImageKey: nowPlaying.image ? `data:image/jpeg;base64,${nowPlaying.image}` : "maple",
+				largeImageKey: nowPlaying.image ? `data:image/jpeg;base64,${nowPlaying.image}` : 'maple',
 				largeImageText: nowPlaying.album || undefined,
 				id: nowPlaying.id || undefined,
 				album: nowPlaying.album || undefined,
-				smallImageKey: "play",
-				smallText: "Listening to Maple",
+				smallImageKey: 'play',
+				smallText: 'Listening to Maple',
 				buttons: [
 					{
-						label: "Listen on Maple",
+						label: 'Listen on Maple',
 						url: `https://maple.kolf.pro/user/${user}`
 					}
 				]
 			};
 
-			io.sockets.sockets.forEach(socket => {
+			io.sockets.sockets.forEach((socket) => {
 				if (socket.user && socket.user.id === user) {
 					socket.emit('rpcUpdate', rpcData);
 				}

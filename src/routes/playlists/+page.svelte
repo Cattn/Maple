@@ -1,21 +1,21 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import ContextMenu from '$lib/components/ui/context-menu/context-menu.svelte';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Drawer from '$lib/components/ui/drawer/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { OPFS } from '$lib/opfs';
 	import { title } from '$lib/store';
 	import type { Playlist } from '$lib/types/playlist';
 	import type { Song } from '$lib/types/song';
-	import { Check, Pencil, Plus, Search } from 'lucide-svelte';
+	import { Check, Grid, List, ListFilter, Music, Pencil, Plus, Search } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import { v4 as uuidv4 } from 'uuid';
-	import { goto } from '$app/navigation';
 	// @ts-ignore
 	import Lazy from 'svelte-lazy';
-
 	import { toast } from 'svelte-sonner';
 
 	let doCreate = false;
@@ -24,6 +24,10 @@
 	let changedDescription = '';
 	let imageFile: Blob | null = null;
 	let playlists: Playlist[] = [];
+	let searchQuery = '';
+	let filteredPlaylists: Playlist[] = [];
+	let listType = 'grid';
+	let isLoading = true;
 	let newPlaylist: Playlist = {
 		id: uuidv4(),
 		name: 'My Playlist',
@@ -34,40 +38,83 @@
 	let songs: Song[] = [];
 	let addedSongs: String[] = [];
 	let curSongs: Song[] = [];
-	let searchQuery = '';
+	let searchSongsQuery = '';
 	let filteredSongs: Song[] = [];
+
 	$: params = new URLSearchParams($page.url.search);
 	$: {
 		doCreate = params.get('create') === 'true';
 	}
 
 	onMount(async () => {
-		songs = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-		filteredSongs = songs;
-		changedName = newPlaylist.name;
-		changedDescription = newPlaylist.description;
-		playlists = await OPFS.get().playlists();
-		title.set('Playlists');
+		try {
+			songs = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
+			filteredSongs = songs;
+			changedName = newPlaylist.name;
+			changedDescription = newPlaylist.description;
+			playlists = await OPFS.get().playlists();
+			filteredPlaylists = [...playlists];
+			title.set('Playlists');
+		} catch (error) {
+			console.error('Error loading playlists:', error);
+			toast.error('Failed to load playlists');
+		} finally {
+			isLoading = false;
+		}
 	});
 
 	async function refresh() {
-		playlists = [];
-		let newPlaylists = await OPFS.get().playlists();
-		songs = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-		changedName = newPlaylist.name;
-		changedDescription = newPlaylist.description;
-		playlists = newPlaylists;
+		try {
+			isLoading = true;
+			playlists = [];
+			let newPlaylists = await OPFS.get().playlists();
+			songs = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
+			changedName = newPlaylist.name;
+			changedDescription = newPlaylist.description;
+			playlists = newPlaylists;
+			filteredPlaylists = [...playlists];
+			filterPlaylists();
+		} catch (error) {
+			console.error('Error refreshing playlists:', error);
+			toast.error('Failed to refresh playlists');
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function filterPlaylists() {
+		if (!searchQuery.trim()) {
+			filteredPlaylists = [...playlists];
+		} else {
+			const query = searchQuery.toLowerCase().trim();
+			filteredPlaylists = playlists.filter(
+				(playlist) =>
+					playlist.name.toLowerCase().includes(query) ||
+					(playlist.description && playlist.description.toLowerCase().includes(query))
+			);
+		}
+	}
+
+	$: searchQuery, filterPlaylists();
+
+	function swapListType(type: string) {
+		listType = type;
 	}
 
 	async function getImageUrl(imagePath: string): Promise<string> {
-		const response = await OPFS.get().image(imagePath);
-		const arrayBuffer = await response.arrayBuffer();
-		const blob = new Blob([arrayBuffer]);
-		const respons2e = await fetch(URL.createObjectURL(blob));
-		if (respons2e.headers.get('Content-Length') === '0') {
+		try {
+			const response = await OPFS.get().image(imagePath);
+			const arrayBuffer = await response.arrayBuffer();
+			const blob = new Blob([arrayBuffer]);
+			const respons2e = await fetch(URL.createObjectURL(blob));
+			if (respons2e.headers.get('Content-Length') === '0') {
+				return '';
+			}
+			return URL.createObjectURL(blob);
+		} catch (error) {
+			console.error('Error loading image:', error);
 			return '';
 		}
-		return URL.createObjectURL(blob);
 	}
 
 	async function editMode() {
@@ -140,8 +187,9 @@
 		if (selectedPlaylist) {
 			OPFS.playlist().delete(selectedPlaylist);
 			toast.success(`Playlist ${selectedPlaylist.name} deleted successfully!`);
-			goto('/playlists');
-			refresh();
+			playlists = playlists.filter((p) => p.id !== selectedPlaylist?.id);
+			filteredPlaylists = filteredPlaylists.filter((p) => p.id !== selectedPlaylist?.id);
+			isOpenAlert = false;
 		} else {
 			console.error('Playlist not found');
 		}
@@ -153,76 +201,305 @@
 	}
 
 	function filterSongs() {
-		filteredSongs = songs.filter(song =>
-			song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			song.album.toLowerCase().includes(searchQuery.toLowerCase())
+		filteredSongs = songs.filter(
+			(song) =>
+				song.title.toLowerCase().includes(searchSongsQuery.toLowerCase()) ||
+				song.artist.toLowerCase().includes(searchSongsQuery.toLowerCase()) ||
+				song.album.toLowerCase().includes(searchSongsQuery.toLowerCase())
 		);
 	}
+
+	$: searchSongsQuery, filterSongs();
 </script>
 
 {#if !doCreate}
-	<div class="px-12 py-8">
-		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-			<a class="pointer" href={`/playlists?create=true`}>
-				<div class="group relative flex flex-col items-start transition-all duration-200 hover:scale-[1.02]">
-					<div class="flex h-44 w-44 animate-pulse items-center justify-center rounded-lg bg-muted md:h-52 md:w-52">
-						<Plus size={40} color="white" />
+	<div class="animate-fade-in px-4 py-4 md:px-6">
+		<header class="animate-slide-up">
+			<h1 class="mb-2 text-2xl font-semibold text-foreground md:text-3xl">Your Playlists</h1>
+
+			<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+				<div class="relative w-full md:w-72">
+					<div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+						<Search size={18} />
 					</div>
-					<div class="mt-3 flex w-full flex-col items-start space-y-1">
-						<h1 class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg">Create Playlist</h1>
-					</div>
+					<input
+						type="text"
+						bind:value={searchQuery}
+						placeholder="Search playlists..."
+						class="h-10 w-full rounded-lg bg-secondary/60 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/50"
+					/>
 				</div>
-			</a>
-			{#each playlists as playlist}
-				<div class="group relative mr-2 flex flex-col items-start transition-all duration-200 hover:scale-[1.02]">
-					{#await getImageUrl(playlist.image) then image}
-						{#if image}
-							<ContextMenu type={'playlist'} on:delete={(e) => openAlert(playlist)}>
-								<a class="pointer" href={`/playlist?playlist=${playlist.id}`}>
-									<img
-										class="h-44 w-44 rounded-lg object-cover shadow-lg transition-all duration-300 group-hover:shadow-xl md:h-52 md:w-52"
-										src={image}
-										alt={playlist.name}
-									/>
-								</a>
-							</ContextMenu>
-						{:else}
-							<ContextMenu type={'playlist'} on:delete={(e) => openAlert(playlist)}>
-								<a class="pointer" href={`/playlist?playlist=${playlist.id}`}>
-									<div class="h-44 w-44 animate-pulse rounded-lg bg-muted md:h-52 md:w-52"></div>
-								</a>
-							</ContextMenu>
-						{/if}
-						{:catch error}
-							<ContextMenu type={'playlist'} on:delete={(e) => openAlert(playlist)}>
-								<a class="pointer" href={`/playlist?playlist=${playlist.id}`}>
-									<div class="h-44 w-44 animate-pulse rounded-lg bg-muted md:h-52 md:w-52"></div>
-								</a>
-							</ContextMenu>
-						{/await}
-						<div class="mt-3 flex w-full flex-col items-start space-y-1">
-							<h1 class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg">
-								{playlist.name}
-							</h1>
+
+				<div class="flex items-center gap-2">
+					<Tabs.Root value={listType} class="mr-2">
+						<Tabs.List class="grid grid-cols-2 bg-secondary/30">
+							<Tabs.Trigger
+								value="grid"
+								class="flex h-9 items-center justify-center data-[state=active]:shadow-none"
+								on:click={() => swapListType('grid')}
+							>
+								<Grid size={18} />
+							</Tabs.Trigger>
+							<Tabs.Trigger
+								value="list"
+								class="flex h-9 items-center justify-center data-[state=active]:shadow-none"
+								on:click={() => swapListType('list')}
+							>
+								<List size={18} />
+							</Tabs.Trigger>
+						</Tabs.List>
+					</Tabs.Root>
+				</div>
+			</div>
+		</header>
+
+		{#if isLoading}
+			<div
+				class="mt-8 grid grid-cols-2 gap-6 sm:grid-cols-2 md:grid-cols-3 md:gap-8 lg:grid-cols-4 xl:grid-cols-5"
+			>
+				{#each Array(10) as _, i}
+					<div class="animate-pulse">
+						<div class="aspect-square w-full rounded-xl bg-secondary/40"></div>
+						<div class="mt-3 h-5 w-3/4 rounded bg-secondary/40"></div>
+						<div class="mt-2 h-4 w-2/4 rounded bg-secondary/30"></div>
+					</div>
+				{/each}
+			</div>
+		{:else if filteredPlaylists.length === 0 && searchQuery !== ''}
+			<div class="animate-fade-in flex h-64 flex-col items-center justify-center text-center">
+				<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary/40">
+					<Search size={24} class="text-muted-foreground" />
+				</div>
+				<h2 class="text-xl font-medium text-foreground">No playlists found</h2>
+				<p class="mt-2 text-muted-foreground">Try adjusting your search</p>
+			</div>
+		{:else if listType === 'grid'}
+			<div
+				class="animate-fade-in my-6 grid grid-cols-2 gap-6 sm:grid-cols-2 md:grid-cols-3 md:gap-8 lg:grid-cols-4 xl:grid-cols-5"
+			>
+				<a
+					href={`/playlists?create=true`}
+					class="hover-scale animate-slide-up group relative flex flex-col items-start"
+				>
+					<div
+						class="relative h-0 w-full overflow-hidden rounded-xl bg-secondary/30 pb-[100%] shadow-lg"
+					>
+						<div class="absolute inset-0 flex items-center justify-center">
+							<div
+								class="transform rounded-full bg-primary/70 p-4 transition-transform duration-300 group-hover:scale-110"
+							>
+								<Plus size={24} class="text-white" />
+							</div>
 						</div>
+					</div>
+					<div class="mt-3 flex w-full flex-col items-start space-y-1 px-1">
+						<h2
+							class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors duration-300 group-hover:text-primary md:text-lg"
+						>
+							Create Playlist
+						</h2>
+					</div>
+				</a>
+
+				{#each filteredPlaylists as playlist, i}
+					<div
+						class="hover-scale animate-slide-up group relative flex flex-col items-start"
+						style="animation-delay: {i * 40}ms"
+					>
+						<a
+							class="perspective w-full"
+							href={`/playlist?playlist=${playlist.id}`}
+							on:contextmenu|preventDefault={() => openAlert(playlist)}
+						>
+							<div class="relative h-0 w-full overflow-hidden rounded-xl pb-[100%] shadow-lg">
+								{#await getImageUrl(playlist.image) then image}
+									<Lazy height={208} keep={true}>
+										{#if image}
+											<img
+												class="absolute left-0 top-0 h-full w-full object-cover transition-all duration-500 group-hover:scale-110"
+												src={image}
+												alt={playlist.name}
+											/>
+										{:else}
+											<div
+												class="absolute inset-0 bg-gradient-to-t from-primary/20 to-transparent"
+											></div>
+											<div class="absolute inset-0 flex items-center justify-center">
+												<div class="text-4xl font-bold text-foreground/50">
+													{playlist.name.charAt(0).toUpperCase()}
+												</div>
+											</div>
+										{/if}
+										<div
+											class="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+										></div>
+									</Lazy>
+								{:catch error}
+									<div
+										class="absolute left-0 top-0 flex h-full w-full items-center justify-center bg-secondary/30"
+									>
+										<Music size={48} class="text-muted-foreground/50" />
+									</div>
+								{/await}
+							</div>
+						</a>
+
+						<div class="mt-3 flex w-full flex-col items-start space-y-1 px-1">
+							<div class="flex w-full items-center justify-between">
+								<h2
+									class="line-clamp-1 flex-1 text-base font-semibold leading-tight text-foreground transition-colors duration-300 group-hover:text-primary md:text-lg"
+								>
+									{playlist.name}
+								</h2>
+
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger asChild let:builder>
+										<Button
+											variant="ghost"
+											size="icon"
+											class="h-7 w-7 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+											builders={[builder]}
+										>
+											<ListFilter size={14} class="text-muted-foreground" />
+										</Button>
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content align="end" class="glass-effect">
+										<DropdownMenu.Item on:click={() => openAlert(playlist)}>
+											Delete Playlist
+										</DropdownMenu.Item>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+							</div>
+
+							{#if playlist.description}
+								<p
+									class="line-clamp-1 w-full text-sm font-normal leading-tight text-muted-foreground md:text-base"
+								>
+									{playlist.description}
+								</p>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<div class="glass-effect my-4 flex flex-col space-y-1 rounded-lg p-2">
+				<div class="animate-slide-up">
+					<a href={`/playlists?create=true`} class="block">
+						<div
+							class="group relative mb-2 flex w-full items-center rounded-xl p-3 transition-all duration-200 hover:bg-secondary/30"
+						>
+							<div class="flex w-full items-center gap-4">
+								<div
+									class="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary/30 md:h-16 md:w-16"
+								>
+									<Plus size={24} class="text-primary" />
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col">
+									<h1
+										class="line-clamp-1 text-base font-medium text-foreground transition-colors duration-300 group-hover:text-primary"
+									>
+										Create New Playlist
+									</h1>
+								</div>
+							</div>
+						</div>
+					</a>
 				</div>
-			{/each}
-		</div>
+
+				{#each filteredPlaylists as playlist, i}
+					<div class="animate-slide-up" style="animation-delay: {i * 30}ms">
+						<div
+							class="group relative mb-2 flex w-full items-center rounded-xl p-3 transition-all duration-200 hover:bg-secondary/30"
+						>
+							<a class="flex-grow" href={`/playlist?playlist=${playlist.id}`}>
+								<div class="flex w-full items-center gap-4">
+									<div
+										class="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg md:h-16 md:w-16"
+									>
+										{#await getImageUrl(playlist.image) then image}
+											<Lazy height={64} keep={true}>
+												{#if image}
+													<img
+														class="h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
+														src={image}
+														alt={playlist.name}
+													/>
+												{:else}
+													<div
+														class="flex h-full w-full items-center justify-center bg-secondary/30 text-xl font-bold text-foreground/50"
+													>
+														{playlist.name.charAt(0).toUpperCase()}
+													</div>
+												{/if}
+											</Lazy>
+										{:catch error}
+											<div class="flex h-full w-full items-center justify-center bg-secondary/30">
+												<Music size={24} class="text-muted-foreground/50" />
+											</div>
+										{/await}
+									</div>
+									<div class="flex min-w-0 flex-1 flex-col">
+										<h1
+											class="line-clamp-1 text-base font-medium text-foreground transition-colors duration-300 group-hover:text-primary"
+										>
+											{playlist.name}
+										</h1>
+										{#if playlist.description}
+											<p class="line-clamp-1 text-sm text-muted-foreground">
+												{playlist.description}
+											</p>
+										{/if}
+									</div>
+								</div>
+							</a>
+
+							<div class="ml-2 flex items-center">
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger asChild let:builder>
+										<Button
+											class="h-8 w-8 bg-transparent p-0 opacity-0 transition-opacity duration-300 hover:bg-secondary/80 group-hover:opacity-100"
+											builders={[builder]}
+										>
+											<ListFilter size={16} class="text-muted-foreground" />
+										</Button>
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content class="glass-effect" align="end">
+										<DropdownMenu.Item on:click={() => openAlert(playlist)}>
+											Delete Playlist
+										</DropdownMenu.Item>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {:else}
-	<div class="px-12 py-8">
-		<div class="mb-8 rounded-lg border bg-card p-4 shadow-sm md:p-6">
+	<div class="animate-fade-in px-4 py-4 md:px-6">
+		<div class="glass-effect mb-8 rounded-lg p-4 shadow-sm md:p-6">
 			<div class="flex flex-col items-center gap-6 md:flex-row md:items-start">
 				<div class="relative">
 					{#if editModeOn}
 						<div class="group relative">
-							<div class="h-44 w-44 rounded-lg bg-muted md:h-64 md:w-64">
-								<div class="flex h-full items-center justify-center">
-									<Plus size={40} color="white" />
-								</div>
+							<div class="h-44 w-44 rounded-lg bg-secondary/30 md:h-64 md:w-64">
+								{#if imageFile}
+									<img
+										class="h-full w-full rounded-lg object-cover"
+										src={URL.createObjectURL(imageFile)}
+										alt="Playlist cover"
+									/>
+								{:else}
+									<div class="flex h-full items-center justify-center">
+										<Plus size={40} class="text-foreground/50" />
+									</div>
+								{/if}
 							</div>
-							<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100">
+							<div
+								class="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50 opacity-0 transition-opacity group-hover:opacity-100"
+							>
 								<label
 									for="playlist-image"
 									class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90"
@@ -259,15 +536,11 @@
 							{/if}
 						</div>
 						<div class="flex items-center gap-2">
-							<Button
-								class="h-9 w-9 p-0"
-								variant="ghost"
-								on:click={() => editMode()}
-							>
+							<Button variant="outline" class="glass-effect border-0" on:click={() => editMode()}>
 								{#if editModeOn}
-									<Check class="h-5 w-5" />
+									<Check size={18} />
 								{:else}
-									<Pencil class="h-5 w-5" />
+									<Pencil size={18} />
 								{/if}
 							</Button>
 						</div>
@@ -286,7 +559,9 @@
 							</div>
 						{:else}
 							<div class="mt-2 space-y-1">
-								<p class="text-base font-medium text-muted-foreground/80">{newPlaylist?.description}</p>
+								<p class="text-base font-medium text-muted-foreground/80">
+									{newPlaylist?.description}
+								</p>
 							</div>
 						{/if}
 					</div>
@@ -294,54 +569,92 @@
 			</div>
 		</div>
 
-		<div class="mx-0 mb-5 mt-2 flex flex-col md:mx-4">
-			<!-- svelte-ignore a11y-no-static-element-interactions -->
-			<!-- svelte-ignore a11y-missing-attribute -->
-			<a
-				on:click={() => (open = true)}
-				class="flex flex-row items-center rounded-sm px-2 py-2 hover:bg-secondary"
-			>
-				<div class="flex flex-row items-center">
-					<div class="mr-4 flex h-16 w-16 items-center justify-center bg-gray-500 md:h-24 md:w-24">
-						<div class="flex h-8 w-8 items-center justify-center rounded-full bg-white md:h-12 md:w-12">
-							<Plus size={16} color="black" class="md:size-5" />
-						</div>
-					</div>
-					<div class="flex flex-grow flex-col items-start">
-						<h1 class="text-lg font-bold leading-none text-foreground">Add Track</h1>
-					</div>
-				</div>
-			</a>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-medium text-foreground">Tracks</h2>
+			<Button variant="outline" class="glass-effect border-0" on:click={() => (open = true)}>
+				<Plus size={16} class="mr-2" />
+				Add Tracks
+			</Button>
 		</div>
 
-		<div class="mx-0 mb-5 mt-2 flex flex-col md:mx-4">
-			{#each curSongs as track}
-				<div class="flex flex-row items-center rounded-sm px-2 py-2 hover:bg-secondary">
-					{#await getImageUrl(track.image) then image}
-						<Lazy height={208} keep={true}>
-							<img class="mr-4 h-16 w-16 rounded-md object-cover md:h-24 md:w-24" src={image} alt={track.title} />
-						</Lazy>
-					{:catch error}
-						<div class="mr-4 h-16 w-16 bg-gray-500 md:h-24 md:w-24"></div>
-					{/await}
-					<div class="flex flex-grow flex-col items-start">
-						<h1 class="text-base font-bold leading-none text-foreground md:text-lg">{track.title}</h1>
-						<h1 class="text-sm font-light leading-none text-slate-400 md:text-base">{track.artist}</h1>
-					</div>
-					<div class="ml-4 flex flex-col items-end text-right">
-						<h1 class="text-sm font-light leading-none text-slate-400 md:text-base">
-							{formatDuration(track.duration)}
-						</h1>
-						<h1 class="text-sm font-light leading-none text-slate-400 md:text-base">{track.album}</h1>
-					</div>
+		{#if curSongs.length === 0}
+			<div class="animate-fade-in flex h-64 flex-col items-center justify-center text-center">
+				<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-secondary/40">
+					<Plus size={24} class="text-muted-foreground" />
 				</div>
-			{/each}
-		</div>
+				<h2 class="text-xl font-medium text-foreground">No tracks added yet</h2>
+				<p class="mt-2 text-muted-foreground">Click "Add Tracks" to start building your playlist</p>
+			</div>
+		{:else}
+			<div class="glass-effect my-4 flex flex-col space-y-1 rounded-lg p-2">
+				{#each curSongs as track, i}
+					<div class="animate-slide-up" style="animation-delay: {i * 30}ms">
+						<div
+							class="group relative mb-2 flex w-full items-center rounded-xl p-3 transition-all duration-200 hover:bg-secondary/30"
+						>
+							<div class="flex w-full items-center gap-4">
+								<div
+									class="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg md:h-16 md:w-16"
+								>
+									{#await getImageUrl(track.image) then image}
+										<Lazy height={64} keep={true}>
+											{#if image}
+												<img
+													class="h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
+													src={image}
+													alt={track.title}
+												/>
+											{:else}
+												<div class="flex h-full w-full items-center justify-center bg-secondary/30">
+													<Music size={24} class="text-muted-foreground/50" />
+												</div>
+											{/if}
+										</Lazy>
+									{:catch error}
+										<div class="flex h-full w-full items-center justify-center bg-secondary/30">
+											<Music size={24} class="text-muted-foreground/50" />
+										</div>
+									{/await}
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col">
+									<h1
+										class="line-clamp-1 text-base font-medium text-foreground transition-colors duration-300 group-hover:text-primary"
+									>
+										{track.title}
+									</h1>
+									<div class="flex items-center">
+										<h2 class="line-clamp-1 text-sm text-muted-foreground">
+											{track.artist}
+										</h2>
+										<span class="mx-2 text-xs text-muted-foreground/40">•</span>
+										<h3 class="text-xs text-muted-foreground/60">
+											{formatDuration(track.duration)}
+										</h3>
+									</div>
+								</div>
+							</div>
+
+							<Button
+								variant="ghost"
+								size="icon"
+								class="h-8 w-8 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+								on:click={() => {
+									addedSongs = addedSongs.filter((s) => s !== track.id);
+									curSongs = curSongs.filter((s) => s.id !== track.id);
+								}}
+							>
+								<ListFilter size={16} class="text-muted-foreground" />
+							</Button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {/if}
 
 <Drawer.Root bind:open>
-	<Drawer.Content>
+	<Drawer.Content class="glass-effect">
 		<div class="mx-auto w-full max-w-4xl">
 			<Drawer.Header>
 				<Drawer.Title>Add Tracks to Playlist</Drawer.Title>
@@ -350,62 +663,71 @@
 			<section data-vaul-no-drag>
 				<div class="mb-4 px-4">
 					<div class="relative">
-						<Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+						<Search
+							class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
 						<input
 							type="text"
 							placeholder="Search tracks..."
 							class="w-full rounded-md border bg-background px-9 py-2 text-sm shadow-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-							bind:value={searchQuery}
-							on:input={() => filterSongs()}
+							bind:value={searchSongsQuery}
 						/>
 					</div>
 				</div>
 				<ScrollArea class="h-[60vh] w-full rounded-md border">
 					{#each filteredSongs as song}
-						<!-- svelte-ignore a11y-no-static-element-interactions -->
-						<!-- svelte-ignore a11y-missing-attribute -->
-						<a
+						<button
 							on:click={() => toggleSongSelection(song)}
-							class="flex flex-row items-center rounded-sm px-4 py-3 hover:bg-secondary"
+							class="flex w-full flex-row items-center rounded-sm px-4 py-3 text-left hover:bg-secondary"
 						>
 							<div class="flex flex-row items-center">
-								<div class="mr-4 flex h-16 w-16 items-center justify-center bg-gray-500">
+								<div class="mr-4 h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
 									{#await getImageUrl(song.image) then image}
-										{#if isToggled(song)}
-											<Lazy height={208} keep={true}>
+										<Lazy height={64} keep={true}>
+											{#if image}
 												<img
-													class="h-16 w-16 border-2 border-green-400 object-cover"
+													class="h-16 w-16 object-cover {isToggled(song)
+														? 'border-2 border-primary'
+														: ''}"
 													src={image}
 													alt={song.title}
 												/>
-											</Lazy>
-										{:else}
-											<Lazy height={208} keep={true}>
-												<img class="h-16 w-16 object-cover" src={image} alt={song.title} />
-											</Lazy>
-										{/if}
+											{:else}
+												<div
+													class="flex h-16 w-16 items-center justify-center bg-secondary/30 {isToggled(
+														song
+													)
+														? 'border-2 border-primary'
+														: ''}"
+												>
+													<Music size={24} class="text-muted-foreground/50" />
+												</div>
+											{/if}
+										</Lazy>
 									{:catch error}
-										<div class="h-16 w-16 bg-gray-500"></div>
+										<div class="flex h-16 w-16 items-center justify-center bg-secondary/30">
+											<Music size={24} class="text-muted-foreground/50" />
+										</div>
 									{/await}
 								</div>
 								<div class="flex flex-grow flex-col items-start">
 									<h1 class="text-lg font-bold leading-none text-foreground">
 										{song.title}
 									</h1>
-									<h1 class="text-md mt-1 font-light leading-none text-slate-400">
+									<h1 class="text-md mt-1 font-light leading-none text-muted-foreground">
 										{song.artist}
 									</h1>
-									<h1 class="text-sm font-light leading-none text-slate-400">
+									<h1 class="text-sm font-light leading-none text-muted-foreground">
 										{song.album}
 									</h1>
 								</div>
 								<div class="ml-4 flex items-center">
 									{#if isToggled(song)}
-										<Check class="h-5 w-5 text-green-500" />
+										<Check class="h-5 w-5 text-primary" />
 									{/if}
 								</div>
 							</div>
-						</a>
+						</button>
 					{/each}
 				</ScrollArea>
 			</section>
@@ -418,7 +740,7 @@
 						<Drawer.Close asChild let:builder>
 							<Button builders={[builder]} variant="outline">Cancel</Button>
 						</Drawer.Close>
-						<Button on:click={() => submitSongs()}>Add Tracks</Button>
+						<Button variant="default" on:click={() => submitSongs()}>Add Tracks</Button>
 					</div>
 				</div>
 			</Drawer.Footer>
@@ -427,18 +749,17 @@
 </Drawer.Root>
 
 <AlertDialog.Root bind:open={isOpenAlert}>
-	<AlertDialog.Trigger></AlertDialog.Trigger>
-	<AlertDialog.Content>
+	<AlertDialog.Content class="glass-effect border-0">
 		<AlertDialog.Header>
-			<AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
+			<AlertDialog.Title>Delete this playlist?</AlertDialog.Title>
 			<AlertDialog.Description>
-				This action cannot be undone. This will COMPLETELY delete the playlist, it will NOT remove
-				the tracks within the playlist.
+				This action cannot be undone. This will delete the playlist, but it will NOT remove the
+				tracks it contains.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<AlertDialog.Action on:click={() => deletePlaylist()}>Continue</AlertDialog.Action>
+			<AlertDialog.Action on:click={() => deletePlaylist()}>Delete</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
