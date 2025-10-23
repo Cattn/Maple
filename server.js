@@ -15,13 +15,16 @@ const server = http.createServer(app);
 const uploadsPath = path.join(__dirname, 'SMS', 'uploads');
 if (fs.existsSync(uploadsPath)) {
     app.use('/SMS/uploads', express.static(uploadsPath));
-    app.use('/SMS/uploads/*', (req, res) => {
+  
+    app.use('/SMS/uploads', (req, res) => {
         res.status(404).send('404, no media found!');
-      });
-    app.use('/SMS/upload/*', (req, res) => {
-        res.status(404).send('404, did you mean `/SMS/uploads`?');
     });
-}
+  
+    app.use('/SMS/upload', (req, res) => {
+      res.status(404).send('404, did you mean `/SMS/uploads`?');
+    });
+  }
+  
 
 // let SvelteKit handle everything else, including serving prerendered pages and static assets
 app.use(handler);

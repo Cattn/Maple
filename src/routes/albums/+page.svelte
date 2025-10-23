@@ -1,228 +1,65 @@
 <script lang="ts">
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import ContextMenu from '$lib/components/ui/context-menu/context-menu.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { OPFS } from '$lib/opfs';
-	import { isSmallDevice, title } from '$lib/store';
-	import type { Album } from '$lib/types';
-	import { ArrowDownZA, ArrowUpAZ, EllipsisVertical, List, ListFilter } from 'lucide-svelte';
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	// @ts-ignore
-	import Lazy from 'svelte-lazy';
-	import { toast } from 'svelte-sonner';
+    import type { Album } from '$lib/types';
+    import Track from '$lib/components/Track.svelte';
+    import { albums } from '$lib/global.svelte';
+    import { ConnectedButtons, Button } from 'm3-svelte';
+    import { flip } from 'svelte/animate';
+    import { cubicOut } from 'svelte/easing';
 
-	let albums: Album[] = [];
+    type SortKey = 'name' | 'artist' | 'year';
+    let sortKey: SortKey = $state('name');
+    let descending = $state(false);
 
-	onMount(async () => {
-		albums = (await OPFS.get().albums()).sort((a, b) => a.name.localeCompare(b.name));
-		title.set('Albums');
-	});
-
-	async function getImageUrl(imagePath: string): Promise<string> {
-		const response = await OPFS.get().image(imagePath);
-		const arrayBuffer = await response.arrayBuffer();
-		const blob = new Blob([arrayBuffer]);
-		return URL.createObjectURL(blob);
-	}
-
-	let sort = 'title';
-	let ascending = true;
-	let listType = 'grid';
-
-	async function sortAlbums(s: string) {
-		sort = s;
-		if (s === 'title') {
-			albums = albums.sort((a, b) =>
-				ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-			); // idk why I choose name instead of title but yeah
-		} else if (s === 'artist') {
-			albums = albums.sort((a, b) =>
-				ascending ? a.artist.localeCompare(b.artist) : b.artist.localeCompare(a.artist)
-			);
-		} else if (s === 'year') {
-			albums = albums.sort((a, b) => (ascending ? a.year - b.year : b.year - a.year));
-		}
-	}
-
-	function swapAscending() {
-		ascending = !ascending;
-		sortAlbums(sort);
-	}
-
-	function formatDuration(duration: number): string {
-		const roundedDuration = Math.round(duration);
-		const minutes = Math.floor(roundedDuration / 60);
-		const seconds = roundedDuration % 60;
-		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-	}
-
-	function swapListType() {
-		if (listType === 'list') {
-			listType = 'grid';
-		} else {
-			listType = 'list';
-		}
-	}
-
-	let isOpenAlert = false;
-	let selectedAlbum: Album | null = null;
-
-	function deleteAlbum() {
-		if (selectedAlbum) {
-			OPFS.artist().delete(selectedAlbum);
-			toast.success(`Playlist ${selectedAlbum.name} deleted successfully!`);
-			goto('/albums');
-		} else {
-			console.error('Playlist not found');
-		}
-	}
-
-	function openAlert(album: Album) {
-		selectedAlbum = album;
-		isOpenAlert = true;
-	}
+    let sortedAlbums: Album[] = $derived.by(() => {
+        const list = [...albums()];
+        list.sort((a, b) => {
+            const aVal = a[sortKey] as unknown as string | number | undefined;
+            const bVal = b[sortKey] as unknown as string | number | undefined;
+            let cmp = 0;
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                cmp = aVal.localeCompare(bVal);
+            } else {
+                cmp = (Number(aVal ?? 0)) - (Number(bVal ?? 0));
+            }
+            return descending ? -cmp : cmp;
+        });
+        return list;
+    });
 </script>
-
-<div class="mt-4 flex h-10 w-full justify-center px-10 md:justify-end">
-	{#if ascending}
-		<Button
-			class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-			on:click={() => swapAscending()}
-		>
-			<ArrowUpAZ size={20} color="white" />
-		</Button>
-	{:else}
-		<Button
-			class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-			on:click={() => swapAscending()}
-		>
-			<ArrowDownZA size={20} color="white" />
-		</Button>
-	{/if}
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger asChild let:builder>
-			<Button
-				class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-				builders={[builder]}
-			>
-				<ListFilter size={20} color="white" />
-			</Button>
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content class="w-56">
-			<DropdownMenu.Label>Sort By</DropdownMenu.Label>
-			<DropdownMenu.Separator />
-			<DropdownMenu.RadioGroup bind:value={sort}>
-				<DropdownMenu.RadioItem value="title" on:click={() => sortAlbums('title')}
-					>Title</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="artist" on:click={() => sortAlbums('artist')}
-					>Artist</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="year" on:click={() => sortAlbums('year')}
-					>Year</DropdownMenu.RadioItem
-				>
-			</DropdownMenu.RadioGroup>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
-	<Button
-		class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-		on:click={() => swapListType()}
-	>
-		<List size={20} color="white" />
-	</Button>
+ 
+<div class="flex flex-row w-full mt-5 justify-center">
+    <div class="mr-2">
+        <input class="hidden" id="flip-order" type="checkbox" bind:checked={descending} />
+        <Button for="flip-order" square variant="filled" iconType="full">
+            <svg class="transition-transform duration-300 ease-in-out" class:rotate-180={descending} xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 13q-.425 0-.712-.288T8 12V5.825L6.125 7.7q-.275.275-.687.275T4.725 7.7q-.3-.3-.3-.712t.3-.713L8.3 2.7q.15-.15.325-.213T9 2.425t.375.062t.325.213l3.6 3.6q.3.3.287.7t-.312.7q-.3.275-.7.288t-.7-.288L10 5.825V12q0 .425-.288.713T9 13m6 8.575q-.2 0-.375-.062T14.3 21.3l-3.6-3.6q-.3-.3-.287-.7t.312-.7q.3-.275.7-.288t.7.288L14 18.175V12q0-.425.288-.712T15 11t.713.288T16 12v6.175l1.875-1.875q.275-.275.688-.275t.712.275q.3.3.3.713t-.3.712L15.7 21.3q-.15.15-.325.213t-.375.062"/></svg>
+        </Button>
+    </div>
+    <ConnectedButtons>
+        <input id="sort-name" type="radio" name="sortKey" value="name" bind:group={sortKey} />
+        <Button for="sort-name" variant="tonal">
+            <div class="flex flex-row">
+                <p>Name</p>
+            </div>
+        </Button>
+        <input id="sort-artist" type="radio" name="sortKey" value="artist" bind:group={sortKey} />
+        <Button for="sort-artist" variant="tonal">
+            <div class="flex flex-row">
+                <p>Artist</p>
+            </div>
+        </Button>
+        <input id="sort-year" type="radio" name="sortKey" value="year" bind:group={sortKey} />
+        <Button for="sort-year" variant="tonal">
+            <div class="flex flex-row">
+                <p>Year</p>
+            </div>
+        </Button>
+    </ConnectedButtons>
 </div>
 
-{#if listType !== 'list'}
-	<div
-		class="my-5 ml-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 sm:gap-x-6 md:ml-16 md:grid-cols-3 md:gap-x-8 lg:grid-cols-4 lg:gap-x-10 xl:grid-cols-5 xl:gap-x-12"
-	>
-		{#each albums as album}
-			<div class="group relative mr-2 flex flex-col items-start transition-all duration-200 hover:scale-[1.02]">
-				{#await getImageUrl(album.image) then image}
-					<ContextMenu type={'album'} on:delete={(e) => openAlert(album)}>
-						<a class="pointer" href={`/album?album=${album.id}`}>
-							<Lazy height={208} keep={true}>
-								<img class="h-44 w-44 rounded-lg object-cover shadow-lg transition-all duration-300 group-hover:shadow-xl md:h-52 md:w-52" src={image} alt={album.name} />
-							</Lazy>
-						</a>
-					</ContextMenu>
-					<div class="mt-3 flex w-full flex-col items-start space-y-1">
-						<h1 class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg">
-							{album.name}
-						</h1>
-						<h1 class="line-clamp-1 w-full text-sm font-normal leading-tight text-muted-foreground md:text-base">
-							{album.artist}
-						</h1>
-					</div>
-				{:catch error}
-					<div class="h-52 w-52 animate-pulse rounded-lg bg-muted"></div>
-				{/await}
-			</div>
-		{/each}
-	</div>
-{:else}
-	<div class="mx-4 mb-5 mt-2 flex flex-col">
-		{#each albums as album}
-			<div class="flex w-full">
-				<div class="flex-grow">
-					<a class="pointer" href={`/album?album=${album.id}`}>
-						<div class="flex flex-row items-center rounded-sm px-2 py-2 hover:bg-secondary">
-							<div class="h-12 w-12 flex-shrink-0 md:h-24 md:w-24">
-								{#await getImageUrl(album.image) then image}
-									<Lazy height={208} keep={true}>
-										<img class="rounded-md" src={image} alt={album.name} />
-									</Lazy>
-								{:catch error}
-									<div class="mr-4 h-24 w-24 bg-gray-500"></div>
-								{/await}
-							</div>
-							<div class="ml-4 flex flex-grow flex-col items-start">
-								<h1 class="text-lg font-bold leading-none text-foreground">{album.name}</h1>
-								<h1 class="text-base font-light leading-none text-slate-400">{album.artist}</h1>
-							</div>
-							{#if !$isSmallDevice}
-								<div class="ml-4 flex flex-col items-end text-right">
-									<h1 class="text-base font-light leading-none text-slate-400">{album.year}</h1>
-									<h1 class="text-base font-light leading-none text-slate-400">{album.artist}</h1>
-								</div>
-							{/if}
-						</div>
-					</a>
-				</div>
-				<div class="ml-2 flex items-center">
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger asChild let:builder>
-							<Button class="h-10 w-10 bg-transparent px-1 hover:bg-secondary" builders={[builder]}>
-								<EllipsisVertical size={20} color="white" />
-							</Button>
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-56">
-							<DropdownMenu.Label>Options</DropdownMenu.Label>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item on:click={() => openAlert(album)}>Delete</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-				</div>
-			</div>
-		{/each}
-	</div>
-{/if}
-
-<AlertDialog.Root bind:open={isOpenAlert}>
-	<AlertDialog.Trigger></AlertDialog.Trigger>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
-			<AlertDialog.Description>
-				This action cannot be undone. This will COMPLETELY delete the playlist, it will NOT remove
-				the tracks within the playlist.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<AlertDialog.Action on:click={() => deleteAlbum()}>Continue</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<div class="grid grid-cols-1 mx-24 gap-x-2 gap-y-2 sm:grid-cols-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2">
+    {#each sortedAlbums as album (album.id)}
+        <div class="will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>
+            <Track album={album} type="album" />
+        </div>
+    {/each}
+</div>

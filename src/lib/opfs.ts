@@ -80,6 +80,13 @@ export class OPFS {
 		toast('Library cleared');
 	}
 
+	public static async getImageUrl(path: string) {
+		const response = await OPFS.get().image(path);
+		const arrayBuffer = await response.arrayBuffer();
+		const blob = new Blob([arrayBuffer]);
+		return URL.createObjectURL(blob);
+	}
+
 	public static async addAlbum(album: Album, id: string) {
 		if (!this.albumsCache) {
 			this.albumsCache = await this.getCache('/albums/albums.json', this.albumsCache);

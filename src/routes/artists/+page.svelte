@@ -1,146 +1,53 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import ContextMenu from '$lib/components/ui/context-menu/context-menu.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { OPFS } from '$lib/opfs';
-	import { title } from '$lib/store';
-	import type { Artist } from '$lib/types';
-	import { ArrowDownZA, ArrowUpAZ, ListFilter } from 'lucide-svelte';
-	import { onMount } from 'svelte';
-	import { toast } from 'svelte-sonner';
+    import type { Artist } from '$lib/types';
+    import Track from '$lib/components/Track.svelte';
+    import { artists } from '$lib/global.svelte';
+    import { ConnectedButtons, Button } from 'm3-svelte';
+    import { flip } from 'svelte/animate';
+    import { cubicOut } from 'svelte/easing';
 
-	let artists: Artist[] = [];
+    type SortKey = 'name';
+    let sortKey: SortKey = $state('name');
+    let descending = $state(false);
 
-	onMount(async () => {
-		artists = (await OPFS.get().artists()).sort((a, b) => a.name.localeCompare(b.name));
-		title.set('Artists');
-	});
-
-	async function getImageUrl(imagePath: string): Promise<string> {
-		const response = await OPFS.get().image(imagePath);
-		const arrayBuffer = await response.arrayBuffer();
-		const blob = new Blob([arrayBuffer]);
-		if (blob && blob.size === 0) {
-			return '';
-		}
-		return URL.createObjectURL(blob);
-	}
-
-	let sort = 'name';
-	let ascending = true;
-
-	async function sortArtists(s: string) {
-		sort = s;
-		if (s === 'name') {
-			artists = artists.sort((a, b) =>
-				ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-			);
-		}
-	}
-
-	function swapAscending() {
-		ascending = !ascending;
-		sortArtists(sort);
-	}
-
-	let isOpenAlert = false;
-	let selectedArtist: Artist | null = null;
-
-	function deleteArtist() {
-		if (selectedArtist) {
-			OPFS.artist().delete(selectedArtist);
-			toast.success(`Playlist ${selectedArtist.name} deleted successfully!`);
-			goto('/artists');
-		} else {
-			console.error('Playlist not found');
-		}
-	}
-
-	function openAlert(artist: Artist) {
-		selectedArtist = artist;
-		isOpenAlert = true;
-	}
+    let sortedArtists: Artist[] = $derived.by(() => {
+        const list = [...artists()];
+        list.sort((a, b) => {
+            const aVal = a[sortKey] as unknown as string | number | undefined;
+            const bVal = b[sortKey] as unknown as string | number | undefined;
+            let cmp = 0;
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                cmp = aVal.localeCompare(bVal);
+            } else {
+                cmp = (Number(aVal ?? 0)) - (Number(bVal ?? 0));
+            }
+            return descending ? -cmp : cmp;
+        });
+        return list;
+    });
 </script>
-
-<div class="px-12 py-8">
-	<div class="mb-4 flex h-10 w-full justify-end">
-		{#if ascending}
-			<Button
-				class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-				on:click={() => swapAscending()}
-			>
-				<ArrowUpAZ size={20} color="white" />
-			</Button>
-		{:else}
-			<Button
-				class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-				on:click={() => swapAscending()}
-			>
-				<ArrowDownZA size={20} color="white" />
-			</Button>
-		{/if}
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger asChild let:builder>
-				<Button
-					class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-					builders={[builder]}
-				>
-					<ListFilter size={20} color="white" />
-				</Button>
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content class="w-56">
-				<DropdownMenu.Label>Sort By</DropdownMenu.Label>
-				<DropdownMenu.Separator />
-				<DropdownMenu.RadioGroup bind:value={sort}>
-					<DropdownMenu.RadioItem value="name" on:click={() => sortArtists('name')}
-						>Name</DropdownMenu.RadioItem
-					>
-				</DropdownMenu.RadioGroup>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
-	</div>
-
-	<div class="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-2 sm:gap-x-6 md:grid-cols-3 md:gap-x-8 lg:grid-cols-4 lg:gap-x-10 xl:grid-cols-5 xl:gap-x-12">
-		{#each artists as artist}
-			<div class="group relative mr-2 flex flex-col items-start transition-all duration-200 hover:scale-[1.02]">
-				{#await getImageUrl(artist.image) then image}
-					<ContextMenu type={'artist'} on:delete={(e) => openAlert(artist)}>
-						<a class="pointer" href={`/artist?artist=${artist.id}`}>
-							{#if image !== ''}
-								<img class="h-44 w-44 rounded-[50%] object-cover shadow-lg transition-all duration-300 group-hover:shadow-xl md:h-52 md:w-52" src={image} alt={artist.name} />
-							{:else}
-								<div class="h-44 w-44 animate-pulse rounded-[50%] bg-muted md:h-52 md:w-52"></div>
-							{/if}
-						</a>
-					</ContextMenu>
-					<div class="mt-3 flex w-full flex-col items-start space-y-1">
-						<h1 class="line-clamp-1 w-full text-base font-semibold leading-tight text-foreground transition-colors group-hover:text-primary md:text-lg">
-							{artist.name}
-						</h1>
-					</div>
-				{:catch error}
-					<div class="h-44 w-44 animate-pulse rounded-[50%] bg-muted md:h-52 md:w-52"></div>
-				{/await}
-			</div>
-		{/each}
-	</div>
+ 
+<div class="flex flex-row w-full mt-5 justify-center">
+    <div class="mr-2">
+        <input class="hidden" id="flip-order" type="checkbox" bind:checked={descending} />
+        <Button for="flip-order" square variant="filled" iconType="full">
+            <svg class="transition-transform duration-300 ease-in-out" class:rotate-180={descending} xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 13q-.425 0-.712-.288T8 12V5.825L6.125 7.7q-.275.275-.687.275T4.725 7.7q-.3-.3-.3-.712t.3-.713L8.3 2.7q.15-.15.325-.213T9 2.425t.375.062t.325.213l3.6 3.6q.3.3.287.7t-.312.7q-.3.275-.7.288t-.7-.288L10 5.825V12q0 .425-.288.713T9 13m6 8.575q-.2 0-.375-.062T14.3 21.3l-3.6-3.6q-.3-.3-.287-.7t.312-.7q.3-.275.7-.288t.7.288L14 18.175V12q0-.425.288-.712T15 11t.713.288T16 12v6.175l1.875-1.875q.275-.275.688-.275t.712.275q.3.3.3.713t-.3.712L15.7 21.3q-.15.15-.325.213t-.375.062"/></svg>
+        </Button>
+    </div>
+    <ConnectedButtons>
+        <input id="sort-name" type="radio" name="sortKey" value="name" bind:group={sortKey} />
+        <Button for="sort-name" variant="tonal">
+            <div class="flex flex-row">
+                <p>Name</p>
+            </div>
+        </Button>
+    </ConnectedButtons>
 </div>
 
-<AlertDialog.Root bind:open={isOpenAlert}>
-	<AlertDialog.Trigger></AlertDialog.Trigger>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
-			<AlertDialog.Description>
-				This action cannot be undone. This will COMPLETELY delete the playlist, it will NOT remove
-				the tracks within the playlist.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<AlertDialog.Action on:click={() => deleteArtist()}>Continue</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<div class="grid grid-cols-1 mx-24 gap-x-2 gap-y-2 sm:grid-cols-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2">
+    {#each sortedArtists as artist (artist.id)}
+        <div class="will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>
+            <Track artist={artist} type="artist" />
+        </div>
+    {/each}
+</div>

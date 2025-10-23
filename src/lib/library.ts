@@ -4,6 +4,7 @@ import { toast } from 'svelte-sonner';
 import { v4 as uuidv4 } from 'uuid';
 import type { Song, Album, Artist } from '$lib/types';
 import UserSettings from '$lib/preferences/usersettings';
+import { refreshLibrary } from '$lib/global.svelte';
 
 declare global { //prob fixes annoying ts warnings
     interface Window {
@@ -73,6 +74,7 @@ export async function createLibrary(mobileFiles?: FileList): Promise<void> {
                     }
                 }
             }
+            await refreshLibrary();
             toast.success(`Library added successfully!`);
         };
 
@@ -113,12 +115,12 @@ export async function createLibrary(mobileFiles?: FileList): Promise<void> {
                 }
             }
 
-            handleFiles(files);
+            await handleFiles(files);
         } else {
             if (mobileFiles) {
-                handleFiles(mobileFiles);
+                await handleFiles(mobileFiles);
             } else if (input.files) {
-                handleFiles(input.files);
+                await handleFiles(input.files);
             }
         }
     } catch (error) {

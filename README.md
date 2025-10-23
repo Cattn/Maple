@@ -144,6 +144,10 @@ Response: ``500``
 
 Maple was inspired by various experiences, such as being on a plane without internet. While I had my music with me, I found local tools like Windows Media Player lacking. This project not only aims to solve that issue but also serves as a learning experience for me.
 
+## Wondering how we use your data?
+
+You can view our privacy policy [here](https://maple.music/privacy)!
+
 ## Credits
 
 ### Lead & Only Developer

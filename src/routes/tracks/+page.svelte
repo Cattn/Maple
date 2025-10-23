@@ -1,195 +1,81 @@
 <script lang="ts">
-	import GridView from '$lib/components/blocks/GridView.svelte';
-	import ListTrack from '$lib/components/blocks/ListTrack.svelte';
-	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import Button from '$lib/components/ui/button/button.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { OPFS } from '$lib/opfs';
-	import { context, title } from '$lib/store';
-	import type { Playlist, Song } from '$lib/types';
-	import { ArrowDownZA, ArrowUpAZ, List, ListFilter } from 'lucide-svelte';
-	import { onMount } from 'svelte';
-	import { toast } from 'svelte-sonner';
+    import type { Song } from '$lib/types';
+    import Track from '$lib/components/Track.svelte';
+    import { tracks } from '$lib/global.svelte';
+    import { ConnectedButtons, Button } from 'm3-svelte';
+    import { flip } from 'svelte/animate';
+    import { cubicOut } from 'svelte/easing';
 
-	let tracks: Song[] = [];
-	let playlists: Playlist[] = [];
+    type SortKey = 'title' | 'artist' | 'album' | 'year' | 'duration';
+    let sortKey: SortKey = $state('title');
+    let descending = $state(false);
 
-	onMount(async () => {
-		tracks = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-		playlists = await OPFS.get().playlists();
-		title.set('Tracks');
-	});
-
-	let sort = 'title';
-	let ascending = true;
-	let listType = 'grid';
-
-	async function sortTracks(s: string) {
-		sort = s;
-		if (s === 'title') {
-			tracks = tracks.sort((a, b) =>
-				ascending ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title)
-			);
-		} else if (s === 'artist') {
-			tracks = tracks.sort((a, b) =>
-				ascending ? a.artist.localeCompare(b.artist) : b.artist.localeCompare(a.artist)
-			);
-		} else if (s === 'album') {
-			tracks = tracks.sort((a, b) =>
-				ascending ? a.album.localeCompare(b.album) : b.album.localeCompare(a.album)
-			);
-		} else if (s === 'year') {
-			tracks = tracks.sort((a, b) => (ascending ? a.year - b.year : b.year - a.year));
-		} else if (s === 'duration') {
-			tracks = tracks.sort((a, b) =>
-				ascending ? a.duration - b.duration : b.duration - a.duration
-			);
-		}
-		if ($context.length === tracks.length) {
-			const contextIds = new Set($context.map((song) => song.id));
-			const tracksIds = new Set(tracks.map((song) => song.id));
-			if (
-				[...contextIds].every((id) => tracksIds.has(id)) &&
-				[...tracksIds].every((id) => contextIds.has(id))
-			) {
-				context.set(tracks);
-			}
-		}
-	}
-
-	function swapAscending() {
-		ascending = !ascending;
-		sortTracks(sort);
-	}
-
-	function swapListType() {
-		if (listType === 'list') {
-			listType = 'grid';
-		} else {
-			listType = 'list';
-		}
-	}
-
-	let open = false;
-	let selectedSong: Song | null = null;
-
-	function openAlert(e: {
-		id?: string;
-		title?: string;
-		artist?: string;
-		album?: string;
-		year?: number;
-		genre?: string | undefined;
-		fileName?: string;
-		duration?: number;
-		image?: any;
-		trackNumber?: number;
-		disk?: number;
-		ext?: string;
-		detail?: any;
-	}) {
-		open = true;
-		selectedSong = e.detail;
-	}
-
-	async function deleteTrack() {
-		if (selectedSong) {
-			OPFS.track().delete(selectedSong);
-			tracks = (await OPFS.get().tracks()).sort((a, b) => a.title.localeCompare(b.title));
-			sortTracks(sort);
-			toast.success(`Deleted ${selectedSong.title} from library`);
-		} else {
-			console.error('Album not found');
-		}
-	}
-
-	function dokeep() {
-		if (tracks.length > 100) {
-			return false;
-		} else {
-			return true;
-		}
-	}
+    let sortedTracks: Song[] = $derived.by(() => {
+        const list = [...tracks()];
+        list.sort((a, b) => {
+            const aVal = a[sortKey] as unknown as string | number | undefined;
+            const bVal = b[sortKey] as unknown as string | number | undefined;
+            let cmp = 0;
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                cmp = aVal.localeCompare(bVal);
+            } else {
+                cmp = (Number(aVal ?? 0)) - (Number(bVal ?? 0));
+            }
+            return descending ? -cmp : cmp;
+        });
+        return list;
+    });
 </script>
+ 
+<div class="flex flex-row w-full mt-5 justify-center">
+    <div class="mr-2">
+        <input class="hidden" id="flip-order" type="checkbox" bind:checked={descending} />
+        <Button for="flip-order" square variant="filled" iconType="full">
+            <svg class="transition-transform duration-300 ease-in-out" class:rotate-180={descending} xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 13q-.425 0-.712-.288T8 12V5.825L6.125 7.7q-.275.275-.687.275T4.725 7.7q-.3-.3-.3-.712t.3-.713L8.3 2.7q.15-.15.325-.213T9 2.425t.375.062t.325.213l3.6 3.6q.3.3.287.7t-.312.7q-.3.275-.7.288t-.7-.288L10 5.825V12q0 .425-.288.713T9 13m6 8.575q-.2 0-.375-.062T14.3 21.3l-3.6-3.6q-.3-.3-.287-.7t.312-.7q.3-.275.7-.288t.7.288L14 18.175V12q0-.425.288-.712T15 11t.713.288T16 12v6.175l1.875-1.875q.275-.275.688-.275t.712.275q.3.3.3.713t-.3.712L15.7 21.3q-.15.15-.325.213t-.375.062"/></svg>
+        </Button>
+    </div>
+    <ConnectedButtons>
+        <input id="sort-title" type="radio" name="sortKey" value="title" bind:group={sortKey} />
+        <Button for="sort-title" variant="tonal">
+            <div class="flex flex-row">
+                <p>Title</p>
+            </div>
+        </Button>
 
-<div class="mt-4 flex h-10 w-full justify-center px-10 md:justify-end">
-	{#if ascending}
-		<Button
-			class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-			on:click={() => swapAscending()}
-		>
-			<ArrowUpAZ size={20} color="white" />
-		</Button>
-	{:else}
-		<Button
-			class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-			on:click={() => swapAscending()}
-		>
-			<ArrowDownZA size={20} color="white" />
-		</Button>
-	{/if}
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger asChild let:builder>
-			<Button
-				class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-				builders={[builder]}
-			>
-				<ListFilter size={20} color="white" />
-			</Button>
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content class="w-56">
-			<DropdownMenu.Label>Sort By</DropdownMenu.Label>
-			<DropdownMenu.Separator />
-			<DropdownMenu.RadioGroup bind:value={sort}>
-				<DropdownMenu.RadioItem value="title" on:click={() => sortTracks('title')}
-					>Title</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="artist" on:click={() => sortTracks('artist')}
-					>Artist</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="album" on:click={() => sortTracks('album')}
-					>Album</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="year" on:click={() => sortTracks('year')}
-					>Year</DropdownMenu.RadioItem
-				>
-				<DropdownMenu.RadioItem value="duration" on:click={() => sortTracks('duration')}
-					>Duration</DropdownMenu.RadioItem
-				>
-			</DropdownMenu.RadioGroup>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
-	<Button
-		class="my-1 ml-3 h-10 w-10 bg-transparent px-1 hover:bg-secondary"
-		on:click={() => swapListType()}
-	>
-		<List size={20} color="white" />
-	</Button>
+        <input id="sort-artist" type="radio" name="sortKey" value="artist" bind:group={sortKey} />
+        <Button for="sort-artist" variant="tonal">
+            <div class="flex flex-row">
+                <p>Artist</p>
+            </div>
+        </Button>
+
+        <input id="sort-album" type="radio" name="sortKey" value="album" bind:group={sortKey} />
+        <Button for="sort-album" variant="tonal">
+            <div class="flex flex-row">
+                <p>Album</p>
+            </div>
+        </Button>
+
+        <input id="sort-year" type="radio" name="sortKey" value="year" bind:group={sortKey} />
+        <Button for="sort-year" variant="tonal">
+            <div class="flex flex-row">
+                <p>Year</p>
+            </div>
+        </Button>
+
+        <input id="sort-duration" type="radio" name="sortKey" value="duration" bind:group={sortKey} />
+        <Button for="sort-duration" variant="tonal">
+            <div class="flex flex-row">
+                <p>Duration</p>
+            </div>
+        </Button>
+    </ConnectedButtons>
 </div>
 
-{#if listType === 'grid'}
-	<GridView keep={dokeep()} {tracks} songs={tracks} on:delete={openAlert} />
-{:else}
-	<div class="mx-4 mb-5 mt-2 flex flex-col">
-		{#each tracks as track}
-			<ListTrack keep={dokeep()} {track} {tracks} {playlists} on:delete={(e) => openAlert(track)} />
-		{/each}
-	</div>
-{/if}
-
-<AlertDialog.Root bind:open>
-	<AlertDialog.Trigger></AlertDialog.Trigger>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
-			<AlertDialog.Description>
-				This action cannot be undone. This will COMPLETELY delete the track, and remove it from any
-				playlists, albums or artist pages.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-			<AlertDialog.Action on:click={() => deleteTrack()}>Continue</AlertDialog.Action>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>
+<div class="grid grid-cols-1 mx-24 gap-x-2 gap-y-2 sm:grid-cols-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2">
+    {#each sortedTracks as track (track.id)}
+        <div class="will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>
+            <Track track={track} />
+        </div>
+    {/each}
+</div>

@@ -1,338 +1,148 @@
 <script lang="ts">
-	import Button from './ui/button/button.svelte';
-	import { Slider } from '$lib/components/ui/slider/index.js';
-	import { OPFS } from '$lib/opfs';
-	import { activeSong, audioPlayer, currentDuration, curTime, setCurTime } from '$lib/store';
-	import Controls from './controls.svelte';
-	import { onMount } from 'svelte';
-
-	import {
-		Play,
-		SkipForward,
-		SkipBack,
-		Shuffle,
-		Repeat,
-		Repeat1,
-		Pause,
-		ChevronUp,
-		ChevronDown
-	} from 'lucide-svelte';
-	import { browser } from '$app/environment';
-
-	import { extractColors } from 'extract-colors';
-
-	import { createEventDispatcher } from 'svelte';
-	const dispatch = createEventDispatcher();
-
-	let currentTime: number[];
-	let one = false;
-	let paused = false;
-	$: volume = [100];
-	let controls: Controls;
-	$: currentTime = [0];
-	$: maxDuration = [0];
-
-	let isCollapsed = true;
-
-	$: {
-		if ($audioPlayer) {
-			paused = !$audioPlayer.playing;
-		}
-	}
-
-	onMount(async () => {
-		audioPlayer.subscribe((value) => {
-			if (value.audio instanceof HTMLAudioElement && value.currentTime !== undefined) {
-				currentTime = [value.audio.currentTime];
-			}
-		});
-	});
-
-	let colors: {
-		[x: string]: any;
-		hex: any;
-	}[];
-
-	currentDuration.subscribe((duration) => {
-		if (duration) {
-			maxDuration = [duration];
-		}
-	});
-	async function getImageUrl(imagePath: string): Promise<string> {
-		const response = await OPFS.get().image(imagePath);
-		const arrayBuffer = await response.arrayBuffer();
-		const blob = new Blob([arrayBuffer]);
-		colors = await extractColors(URL.createObjectURL(blob));
-		return URL.createObjectURL(blob);
-	}
-
-	function pausePlay() {
-		controls.pausePlay();
-	}
-
-	function nextSong() {
-		controls.nextSong();
-	}
-
-	function prevSong() {
-		controls.prevSong();
-	}
-
-	function changeVolume() {
-		//volume is an [], should only take number, who knows why this works rn but it does so ima just ignore warning :skull:
-		//@ts-ignore
-		controls.volume(volume);
-	}
-
-	function handleScrub(value: number) {
-		if (value !== $setCurTime[0]) {
-			curTime.set([value]);
-			audioPlayer.update((state) => {
-				if (state.audio instanceof HTMLAudioElement) {
-					state.audio.currentTime = value;
-					return { ...state, currentTime: value };
-				}
-				return state;
-			});
-		}
-	}
-
-	function drawerUp() {
-		dispatch('expand');
-		isCollapsed = !isCollapsed;
-	}
-
-	let mouseOn = false;
+	import { Button, Slider } from 'm3-svelte';
+	
 </script>
 
-{#if isCollapsed}
-	{#if colors?.[0]?.hex && colors?.[1]?.hex}
-		<!-- svelte-ignore a11y-missing-attribute -->
-		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<a on:click={() => handleScrub($curTime[0])} on:mouseup={() => handleScrub($curTime[0])}>
-			<Slider
-				color="bg-primary"
-				bind:value={$curTime}
-				bind:max={maxDuration[0]}
-				step={0.1}
-				class="z-10 ml-0 h-[2%] w-[100%] pr-0"
-				{colors}
-			></Slider>
-		</a>
-	{:else}
-		<!-- svelte-ignore a11y-missing-attribute -->
-		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<a on:click={() => handleScrub($curTime[0])} on:mouseup={() => handleScrub($curTime[0])}>
-			<Slider
-				color="bg-primary"
-				bind:value={$curTime}
-				bind:max={maxDuration[0]}
-				step={0.1}
-				class="z-10 ml-4 h-[2%] w-[100%] pr-8"
-			></Slider>
-		</a>
-	{/if}
-
-	<div class="relative flex h-[98%] items-center justify-between">
-		<div class="ml-2 flex sm:ml-0">
-			{#if $activeSong.title}
-				{#await getImageUrl($activeSong.image)}
-					<div class="ml-1 h-20 w-20 self-center rounded-xl bg-gray-500"></div>
-				{:then image}
-					<img src={image} alt={$activeSong.title} class="h-20 self-center rounded-xl p-2" />
-				{:catch error}
-					<img
-						src="/temp/MapleD.svg"
-						alt={$activeSong.title}
-						class="h-20 self-center rounded-xl p-2"
-					/>
-				{/await}
-				<div class="hidden flex-col items-start sm:flex">
-					<Button variant="link" class="mt-5 font-bold text-md mb-0 p-0 h-fit underline-offset-1 py-0 px-0">{$activeSong.title || 'Unknown Title'}</Button>
-					<Button variant="link" class="mt-[-0.5rem] p-0 m-0 h-3 text-sm font-normal underline-offset-1 py-0 px-0 my-0">{$activeSong.artist || 'Unknown Artist'}</Button>
-				</div>
-			{:else}
-				<img src="/temp/MapleD.svg" alt="gnx" class="h-20 self-center rounded-xl p-2" />
-				<div class="hidden flex-col items-start sm:flex">
-					<Button variant="link" class="mt-5 font-bold text-md mb-0 p-0 h-fit underline-offset-1 py-0 px-0">Nothing Playing</Button>
-					<Button variant="link" class="mt-[-0.5rem] p-0 m-0 h-3 text-sm font-normal underline-offset-1 py-0 px-0 my-0">...</Button>
-				</div>
-			{/if}
-		</div>
-		<div class="absolute left-1/2 flex -translate-x-1/2 transform items-center justify-center">
-			<Button
-				disabled
-				class="flex h-fit w-fit flex-row items-center justify-start bg-transparent p-2 hover:bg-secondary"
-			>
-				<Shuffle size={15} class="text-foreground" />
-			</Button>
-			<Button
-				on:click={prevSong}
-				class="flex h-fit w-fit flex-row items-center justify-start bg-transparent p-2 hover:bg-secondary"
-			>
-				<SkipBack size={25} class="text-foreground" />
-			</Button>
-			<Button
-				on:click={pausePlay}
-				class="flex h-fit w-fit flex-row items-center justify-start bg-transparent p-2 hover:bg-secondary"
-			>
-				{#if !paused}
-					<Pause size={25} class="text-foreground" />
-				{:else}
-					<Play size={25} class="text-foreground" />
-				{/if}
-			</Button>
-			<Button
-				on:click={nextSong}
-				class="flex h-fit w-fit flex-row items-center justify-start bg-transparent p-2 hover:bg-secondary"
-			>
-				<SkipForward size={25} class="text-foreground" />
-			</Button>
-			<Button
-				disabled
-				class="flex h-fit w-fit flex-row items-center justify-start bg-transparent p-2 hover:bg-secondary"
-			>
-				{#if one}
-					<Repeat1 size={15} class="text-foreground" />
-				{:else}
-					<Repeat size={15} class="text-foreground" />
-				{/if}
-			</Button>
-		</div>
-
-		<div class="mr-5 hidden flex-grow justify-end sm:flex">
-			<!-- svelte-ignore a11y-no-static-element-interactions -->
-			<!-- svelte-ignore a11y-missing-attribute -->
-			<a on:click={() => changeVolume()} on:mouseup={() => changeVolume()}>
-				<Slider bind:value={volume} max={100} step={2} class="w-40" />
-			</a>
-		</div>
-		<div class="mr-4 flex justify-end sm:hidden">
-			<Button
-				on:click={drawerUp}
-				variant="secondary"
-				class="flex h-fit w-fit flex-row items-center justify-start rounded-[50%] p-2"
-			>
-				<ChevronUp size={25} class="text-foreground" />
-			</Button>
-		</div>
-	</div>
-{:else}
-	<div class="relative flex h-[98%] flex-col items-center bg-background/95 backdrop-blur-sm">
-		<div class="w-full px-4">
-			{#if colors?.[0]?.hex && colors?.[1]?.hex}
-				<div
-					class="mb-4 mt-2 flex w-full justify-center rounded-xl p-2"
-					style="background: linear-gradient(to right, rgba({colors[0].red},{colors[0].green},{colors[0].blue},0.5), rgba({colors[1].red},{colors[1].green},{colors[1].blue},0.5));"
-				>
-					{#await getImageUrl($activeSong.image)}
-						<div class="h-64 w-64 rounded-xl bg-gray-500"></div>
-					{:then image}
-						<img src={image} alt={$activeSong.title} class="h-64 w-64 rounded-xl" />
-					{:catch error}
-						<img src="/temp/MapleD.svg" alt={$activeSong.title} class="h-64 w-64 rounded-xl" />
-					{/await}
-				</div>
-			{:else}
-				<div class="mb-4 mt-2 flex w-full justify-center rounded-xl bg-gradient-to-r from-gray-500 to-gray-700 p-2">
-					{#await getImageUrl($activeSong.image)}
-						<div class="h-64 w-64 rounded-xl bg-gray-500"></div>
-					{:then image}
-						<img src={image} alt={$activeSong.title} class="h-64 w-64 rounded-xl" />
-					{:catch error}
-						<img src="/temp/MapleD.svg" alt={$activeSong.title} class="h-64 w-64 rounded-xl" />
-					{/await}
-				</div>
-			{/if}
-		</div>
-
-		<div class="w-full px-4">
-			<div class="mb-4">
-				<Slider
-					color="bg-primary"
-					bind:value={$curTime}
-					bind:max={maxDuration[0]}
-					step={0.1}
-					class="w-full"
-				></Slider>
-			</div>
-
-			<div class="flex items-center justify-center">
-				<div class="flex items-center space-x-4">
-					<Button
-						disabled
-						variant="ghost"
-						class="h-10 w-10 p-0"
-					>
-						<Shuffle size={20} class="text-foreground" />
-					</Button>
-					<Button
-						on:click={prevSong}
-						variant="ghost"
-						class="h-10 w-10 p-0"
-					>
-						<SkipBack size={24} class="text-foreground" />
-					</Button>
-					<Button
-						on:click={pausePlay}
-						variant="ghost"
-						class="h-12 w-12 p-0"
-					>
-						{#if !paused}
-							<Pause size={28} class="text-foreground" />
-						{:else}
-							<Play size={28} class="text-foreground" />
-						{/if}
-					</Button>
-					<Button
-						on:click={nextSong}
-						variant="ghost"
-						class="h-10 w-10 p-0"
-					>
-						<SkipForward size={24} class="text-foreground" />
-					</Button>
-					<Button
-						disabled
-						variant="ghost"
-						class="h-10 w-10 p-0"
-					>
-						{#if one}
-							<Repeat1 size={20} class="text-foreground" />
-						{:else}
-							<Repeat size={20} class="text-foreground" />
-						{/if}
-					</Button>
-				</div>
+<div class="fixed bottom-5 rounded-full left-23 mx-8 right-0 flex h-24 items-center justify-between bg-secondary">
+    <div class="grid grid-cols-3 w-full h-full items-center">
+		<div class="flex items-center gap-2 ml-6 justify-start">
+			<img src="https://raw.githubusercontent.com/Cattn/Maple/8c1ab06960d3cec36714bf99cd6cee4ebb53913a/static/temp/MapleD.svg" alt="Song Art" class="w-14 h-14 rounded-lg" />
+			<div class="flex flex-col">
+				<p class="song-title text-on-secondary-fixed">
+					Song Name
+				</p>
+				<p class="artist-title">
+					Artist Name
+				</p>
 			</div>
 		</div>
-
-		<div class="absolute bottom-0 w-full border-t border-border bg-background/95 px-4 py-2">
-			<div class="flex h-12 items-center justify-between">
-				<div class="flex items-center space-x-3">
-					{#if $activeSong.title}
-						{#await getImageUrl($activeSong.image)}
-							<div class="h-10 w-10 rounded-lg bg-gray-500"></div>
-						{:then image}
-							<img src={image} alt={$activeSong.title} class="h-10 w-10 rounded-lg" />
-						{:catch error}
-							<img src="/temp/MapleD.svg" alt={$activeSong.title} class="h-10 w-10 rounded-lg" />
-						{/await}
-						<div class="flex flex-col">
-							<span class="text-sm font-semibold">{$activeSong.title || 'Unknown'}</span>
-							<span class="text-xs text-muted-foreground">{$activeSong.artist || 'Unknown'}</span>
-						</div>
-					{/if}
-				</div>
-				<Button
-					on:click={drawerUp}
-					variant="ghost"
-					class="h-8 w-8 p-0"
-				>
-					<ChevronDown size={20} class="text-foreground" />
+		<div class="flex justify-center gap-2">
+			<div>
+				<Button iconType="full" square variant="elevated">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M14 20v-2h2.6l-3.175-3.175L14.85 13.4L18 16.55V14h2v6zm-8.6 0L4 18.6L16.6 6H14V4h6v6h-2V7.4zm3.775-9.425L4 5.4L5.4 4l5.175 5.175z"/></svg>
+				</Button>
+			</div>
+			<div class="button-mod-2">
+				<Button iconType="full" square variant="tonal">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M5.5 18V6h2v12zm13 0l-9-6l9-6zm-2-3.75v-4.5L13.1 12z"/></svg>
+				</Button>
+			</div>
+			<div class="button-mod">
+				<Button iconType="full" square variant="tonal">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M8 19V5l11 7zm2-3.65L15.25 12L10 8.65z"/></svg>
+				</Button>
+			</div>
+			<div class="button-mod-2">
+				<Button iconType="full" square variant="tonal">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M16.5 18V6h2v12zm-11 0V6l9 6zm2-3.75L10.9 12L7.5 9.75z"/></svg>
+				</Button>
+			</div>
+			<div>
+				<Button iconType="full" square variant="elevated">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6c0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8m0 14c-3.31 0-6-2.69-6-6c0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4l-4-4z"/></svg>
 				</Button>
 			</div>
 		</div>
+		<div class="flex justify-end mr-6 items-center">
+			<div class="ml-2 mr-2">
+				<svg class="fill-icon-color" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M7 15V9h4l5-5v16l-5-5zm2-2h2.85L14 15.15v-6.3L11.85 11H9zm2.5-1"/></svg>			
+			</div>
+			<div class="slider-stuff">
+				<Slider
+					min={0}
+					max={100}
+					value={50}
+					step={1}
+					showValue
+					format={(n) => `${n}%`}
+				/>
+			</div>
+			<div class="ml-2 mr-2">
+				<svg class="fill-icon-color" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M14 20.725v-2.05q2.25-.65 3.625-2.5t1.375-4.2t-1.375-4.2T14 5.275v-2.05q3.1.7 5.05 3.138T21 11.975t-1.95 5.613T14 20.725M3 15V9h4l5-5v16l-5-5zm11 1V7.95q1.175.55 1.838 1.65T16.5 12q0 1.275-.663 2.363T14 16m-4-7.15L7.85 11H5v2h2.85L10 15.15zM7.5 12"/></svg>
+			</div>
+		</div>
 	</div>
-{/if}
+</div>
 
-<Controls bind:this={controls} />
+<style>
+	.song-title {
+		color: var(--color-on-secondary-fixed);
+		font-size: 20px;
+		font-family: 'Roboto Flex', sans-serif;
+		font-weight: 1000;
+		font-style: normal;
+		line-height: 20px;
+		font-variation-settings:
+			'slnt' 0,
+			'wdth' 151,
+			'GRAD' 82,
+			'XOPQ' 100,
+			'XTRA' 468,
+			'YOPQ' 79,
+			'YTAS' 750,
+			'YTDE' -203,
+			'YTFI' 738,
+			'YTLC' 514,
+			'YTUC' 712;
+	}
+
+	.artist-title {
+		color: var(--color-on-secondary-fixed-variant);
+		font-size: 16px;
+		font-family: 'Roboto Flex', sans-serif;
+		font-weight: 658;
+		line-height: 20px;
+		font-style: normal;
+		font-variation-settings:
+			'slnt' -7,
+			'wdth' 50,
+			'GRAD' 129,
+			'XOPQ' 96,
+			'XTRA' 468,
+			'YOPQ' 79,
+			'YTAS' 750,
+			'YTDE' -203,
+			'YTFI' 738,
+			'YTLC' 514,
+			'YTUC' 712;
+	}
+
+	.button-mod :global(button) {
+		padding-left: 30px;
+		padding-right: 30px;
+		background-color: var(--color-on-secondary) !important;
+		scale: 1.3;
+	}
+
+	.button-mod :global(svg) {
+		scale: 1.2;
+	}
+
+	.button-mod-2 :global(button) {
+		padding-left: 30px;
+		padding-right: 30px;
+		margin-left: 8px;
+		margin-right: 8px;
+		transform: scaleY(1.3);
+		transform-origin: center;
+	}
+
+	.button-mod-2 :global(svg) {
+		transform: scaleX(1.3);
+	}
+
+	.slider-stuff :global(div ::before) {
+        background-color: rgb(var(--m3-scheme-on-secondary-fixed)) !important;
+    }
+    .slider-stuff :global(div ::after) {
+        background-color: rgb(var(--m3-scheme-on-secondary-fixed-variant)) !important;
+    }
+	.slider-stuff :global(div:nth-child(3)) {
+        background-color: rgb(var(--m3-scheme-on-secondary-fixed-variant)) !important;
+    }
+
+	.fill-icon-color {
+		color: rgb(var(--m3-scheme-on-secondary-fixed-variant));
+		scale: 1.2;
+	}
+</style>
