@@ -41,6 +41,7 @@
 	"dependencies": {
 		"@ktibow/material-color-utilities-nightly": "^0.3.11755307340811",
 		"@vite-pwa/sveltekit": "^1.0.0",
+		"better-auth": "^1.4.17",
 		"express": "^5.1.0",
 		"m3-svelte": "^4.6.2",
 		"music-metadata": "^11.7.3",

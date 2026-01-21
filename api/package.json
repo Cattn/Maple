@@ -1,0 +1,19 @@
+{
+  "name": "maple-api",
+  "version": "0.0.1",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "^1.4.17",
+    "@elysiajs/cors": "^1.4.1",
+    "better-auth": "^1.4.17",
+    "elysia": "latest",
+    "mysql2": "^3.16.1"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "module": "src/index.js"
+}
