@@ -54,7 +54,7 @@ var options = {
 	}
 };
 
-const limiter = slowDown({
+const slower = slowDown({
 	windowMs: 2 * 60 * 1000,
 	delayAfter: 5,
 	delayMs: (hits) => {
@@ -64,10 +64,10 @@ const limiter = slowDown({
 	maxDelayMs: 15000,
 });
 
-// const limiter = rateLimit({
-// 	windowMs: 15 * 60 * 1000,
-// 	limit: 20,
-// })
+const limiter = rateLimit({
+	windowMs: 2 * 60 * 1000,
+	limit: 35,
+})
 
 try {
 
@@ -96,6 +96,7 @@ try {
 	const friends = require('./user/friends.js');
 
 	app.use(limiter);
+	app.use(slower);
 	
 	app.use(cors(corsOptions));
 
