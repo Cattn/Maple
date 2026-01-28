@@ -19,6 +19,8 @@
 	} from '$lib/player';
 	import { OPFS } from '$lib/opfs';
 	import { browser } from '$app/environment';
+	import { page } from '$app/state';
+	import Queue from './Queue.svelte';
 
 	let artwork = $state(null as string | null);
 	let progress = $state(0);
@@ -29,6 +31,12 @@
 	let fillPercent = $state(0);
 	let trackEl: HTMLDivElement | null = null;
 	let dragging = $state(false);
+	let queueOpen = $state(false);
+
+	$effect(() => {
+		page.url.pathname;
+		queueOpen = false;
+	});
 
 	$effect(() => {
 		if (!browser) return;
@@ -110,6 +118,10 @@
 			trackEl.releasePointerCapture(event.pointerId);
 		} catch {}
 		dragging = false;
+	}
+
+	function openQueue() {
+		queueOpen = !queueOpen;
 	}
 </script>
 
@@ -229,6 +241,21 @@
 				</div>
 			</div>
 			<div class="mr-6 flex items-center justify-end">
+				<div>
+					<Button
+						iconType="full"
+						square
+						variant={queueOpen ? 'filled' : 'tonal'}
+						onclick={openQueue}
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+							><path
+								fill="currentColor"
+								d="M16 20q-1.25 0-2.125-.875T13 17t.875-2.125T16 14q.275 0 .525.038T17 14.2V7q0-.425.288-.712T18 6h3q.425 0 .713.288T22 7t-.288.713T21 8h-2v9q0 1.25-.875 2.125T16 20M4 16q-.425 0-.712-.288T3 15t.288-.712T4 14h6q.425 0 .713.288T11 15t-.288.713T10 16zm0-4q-.425 0-.712-.288T3 11t.288-.712T4 10h10q.425 0 .713.288T15 11t-.288.713T14 12zm0-4q-.425 0-.712-.288T3 7t.288-.712T4 6h10q.425 0 .713.288T15 7t-.288.713T14 8z"
+							/></svg
+						>
+					</Button>
+				</div>
 				<div class="mx-2">
 					<svg
 						class="fill-icon-color scale-110"
@@ -269,6 +296,10 @@
 		</div>
 	</div>
 </div>
+
+{#if queueOpen}
+	<Queue />
+{/if}
 
 <style>
 	.song-title {

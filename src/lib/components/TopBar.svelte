@@ -47,10 +47,6 @@
 					placeholder="Search..."
 					class="text-surface placeholder-surface! bg-on-secondary-container border-outline focus:border-primary focus:ring-primary/20 h-10 w-full max-w-xl rounded-full border pr-12 pl-4 text-sm transition-all duration-200 focus:ring-2 focus:outline-none"
 				/>
-				<!-- Future autofill/suggestions container -->
-				<!-- <div class="absolute top-full left-0 right-0 bg-surface border border-outline rounded-lg mt-1 shadow-lg z-50">
-                    Suggestions will go here
-                </div> -->
 			</div>
 		</div>
 

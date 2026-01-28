@@ -3,32 +3,32 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createLibrary } from '$lib/library';
-	import { UserInfo, SavedUser } from '$lib/store';
+	import { SavedUser, isLoggedIn } from '$lib/store';
 
 	const isActive = (path: string) => page.url.pathname === path;
 </script>
 
-<div class="flex items-center justify-center">
+<div class="hidden items-center justify-center md:flex">
 	<div
 		class="bg-surface-container-high fixed top-0 left-0 flex h-[100%] flex-col items-center justify-between rounded-br-4xl p-4"
 	>
 		<div class="mt-3 mb-3 flex flex-col items-center justify-center gap-2">
-			<div class="large-button-mod">
-				<Button
-					variant={'filled'}
-					iconType="full"
-					onclick={() => {
-						goto('/login');
-					}}
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24"
-						><path
+			<button
+				type="button"
+				onclick={() => goto($isLoggedIn ? '/settings' : '/login')}
+				class="bg-primary text-on-primary hover:bg-primary/90 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-colors"
+			>
+				{#if $SavedUser?.pfp}
+					<img src={$SavedUser.pfp} alt="Profile" class="h-12 w-12 rounded-full object-cover" />
+				{:else}
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+						<path
 							fill="currentColor"
-							d="M9.775 12q-.9 0-1.5-.675T7.8 9.75l.325-2.45q.2-1.425 1.3-2.363T12 4t2.575.938t1.3 2.362l.325 2.45q.125.9-.475 1.575t-1.5.675zM4 18v-.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2v.8q0 .825-.587 1.413T18 20H6q-.825 0-1.412-.587T4 18"
-						/></svg
-					>
-				</Button>
-			</div>
+							d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
+						/>
+					</svg>
+				{/if}
+			</button>
 
 			<div class="button-mod mt-5 flex flex-col items-center justify-center gap-2">
 				<div class="flex flex-col items-center justify-center">
@@ -181,10 +181,6 @@
 
 	.button-mod :global(svg) {
 		scale: 0.8;
-	}
-
-	.large-button-mod :global(button) {
-		scale: 1.2;
 	}
 
 	.button-mod h1 {

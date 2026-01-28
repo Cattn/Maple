@@ -188,25 +188,27 @@
 	});
 </script>
 
-<div class="flex flex-col gap-8 pt-10 pr-5 pl-6 md:flex-row md:pt-14 md:pr-20 md:pl-14 lg:pl-28">
-	<div class="md:w-1/2 lg:w-2/5">
+<div class="flex flex-col gap-8 pt-4 pr-3 pl-3 md:flex-row md:pt-14 md:pr-20 md:pl-14 lg:pl-28 mb-5 md:mb-0">
+	<div class="w-full md:w-1/2 lg:w-2/5">
 		{#if imageUrl}
 			<img
 				src={imageUrl}
 				alt={album?.name}
-				class="aspect-square w-full max-w-sm rounded-lg object-cover shadow-md"
+				class="mx-auto aspect-square w-full max-w-sm rounded-lg object-cover shadow-md md:mx-0"
 			/>
 		{:else}
-			<div class="bg-surface-container aspect-square w-full max-w-sm rounded-lg"></div>
+			<div
+				class="bg-surface-container mx-auto aspect-square w-full max-w-sm rounded-lg md:mx-0"
+			></div>
 		{/if}
 
-		<div class="mt-4 space-y-1">
+		<div class="mt-4 space-y-1 text-center md:text-left">
 			<h1 class="text-on-surface text-2xl font-bold">{album?.name}</h1>
 			<p class="text-on-surface-variant">{album?.artist}</p>
 			<p class="text-on-surface-variant">{album?.year}</p>
 		</div>
 
-		<div class="mt-4 flex gap-3">
+		<div class="mt-4 flex justify-center gap-3 md:justify-start">
 			<Button variant="filled">Play</Button>
 			<Button variant="tonal">Shuffle</Button>
 		</div>

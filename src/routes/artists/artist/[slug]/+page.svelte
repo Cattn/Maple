@@ -81,7 +81,7 @@
 	});
 </script>
 
-<div class="mb-5 flex flex-col gap-8 px-6 pt-10 md:px-14 md:pt-14 lg:px-28">
+<div class="mb-5 flex flex-col gap-8 px-4 pt-4 md:px-14 md:pt-14 lg:px-28">
 	<div class="flex items-center gap-4">
 		{#if imageUrl}
 			<img src={imageUrl} alt={artist?.name} class="h-24 w-24 rounded-lg object-cover" />
@@ -107,7 +107,7 @@
 			onChange={handleAlbumFiltersChange}
 		/>
 		<div
-			class="grid grid-cols-1 gap-x-2 gap-y-2 sm:grid-cols-2 sm:gap-x-3 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2"
+			class="grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:grid-cols-3 md:gap-x-1 lg:grid-cols-4 lg:gap-x-1 xl:grid-cols-5 xl:gap-x-1"
 		>
 			{#each sortedAlbums as album (album.id)}
 				<div class="will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>

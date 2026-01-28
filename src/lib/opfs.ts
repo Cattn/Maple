@@ -1,5 +1,6 @@
 import type { Album, Artist, Playlist, Song } from '$lib/types';
 import type { StatsSnapshot } from '$lib/stats';
+import { SERVER } from '$lib/api/server';
 import { dir, file, write } from 'opfs-tools';
 import { toast } from 'svelte-sonner';
 export class OPFS {
@@ -9,7 +10,7 @@ export class OPFS {
 	private static playlistsCache: Playlist[] | null = null;
 	private static statsCache: StatsSnapshot | null = null;
 	private static imageUrlCache: Map<string, string> = new Map();
-	private static SERVER = 'https://api.maple.music';
+	private static SERVER = SERVER;
 
 	private static async getCache<T>(path: string, cache: T[] | null): Promise<T[]> {
 		if (cache) return cache;
@@ -102,6 +103,8 @@ export class OPFS {
 		return url;
 	}
 
+	private static saveStatsQueue: Promise<void> = Promise.resolve();
+
 	public static async getStats() {
 		if (this.statsCache) return this.statsCache;
 		try {
@@ -118,9 +121,15 @@ export class OPFS {
 	}
 
 	public static async saveStats(snapshot: StatsSnapshot) {
-		await this.ensureConfigDir();
 		this.statsCache = snapshot;
-		await write('/config/stats.json', JSON.stringify(snapshot));
+		const currentQueue = this.saveStatsQueue;
+		this.saveStatsQueue = currentQueue
+			.then(async () => {
+				await this.ensureConfigDir();
+				await write('/config/stats.json', JSON.stringify(snapshot));
+			})
+			.catch(() => {});
+		await this.saveStatsQueue;
 	}
 
 	public static async addAlbum(album: Album, id: string) {

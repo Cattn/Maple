@@ -7,7 +7,7 @@
 </h3>
 
 <p align="center">
-    <a href="https://maple.music/" target="_blank">stable</a> · <a href="https://beta.cattn.dev/" target="_blank">beta</a>
+    <a href="https://play.maple.music/" target="_blank">web</a> · <a href="https://beta.cattn.dev/" target="_blank">beta</a> · <a href="https://maple.music/apple" target="_blank">iOS</a>
 </p>
 
 > Need Help? Join our [Development Server](https://discord.gg/Wxrp73HVj4)
@@ -167,10 +167,10 @@ You can view our privacy policy [here](https://maple.music/privacy)!
 
 ## Credits
 
-### Lead & Only Developer
+### Lead Developer
 
 - Cattn
 
-### Logos & Branding
+### Logos & Various Help
 
-- Nailington
+- Nailington ([@Nailington](https://github.com/Nailington))

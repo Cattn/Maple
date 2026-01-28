@@ -14,6 +14,38 @@ declare global {
 	}
 }
 
+function isMobileBrowser(): boolean {
+	return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(
+		navigator.userAgent
+	);
+}
+
+function isDirectoryPickerSupported(): boolean {
+	if (isMobileBrowser()) {
+		return false;
+	}
+	return typeof window.showDirectoryPicker === 'function';
+}
+
+function yieldToUI(): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function parseMetadataWithTimeout(
+	file: File,
+	timeoutMs: number = 30000
+): Promise<Awaited<ReturnType<typeof parseBlob>> | null> {
+	try {
+		const timeoutPromise = new Promise<null>((_, reject) =>
+			setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs)
+		);
+		const parsePromise = parseBlob(file);
+		return await Promise.race([parsePromise, timeoutPromise]);
+	} catch {
+		return null;
+	}
+}
+
 export async function createLibrary(mobileFiles?: FileList): Promise<void> {
 	try {
 		const sampleImage = await fetch('/placeholder.png');
@@ -23,71 +55,92 @@ export async function createLibrary(mobileFiles?: FileList): Promise<void> {
 		const input = document.getElementById('files') as HTMLInputElement;
 
 		const handleFiles = async (files: FileList | File[]) => {
+			if (!files || files.length === 0) {
+				toast.error('No files selected. Please select audio files to upload.');
+				return;
+			}
+
+			const audioFiles = Array.from(files).filter((file) => file.type.startsWith('audio/'));
+			if (audioFiles.length === 0) {
+				toast.error('No audio files found. Please select audio files (MP3, FLAC, etc.).');
+				return;
+			}
+
 			let i = 0;
-			for (const file of Array.from(files)) {
-				if (file.type.startsWith('audio/')) {
-					i++;
-					toast(`${i} of ${files.length} | Processing ${file.name}`);
-					try {
-						const metadata = await parseBlob(file);
-						const track: Song = {
-							id: uuidv4(),
-							title: metadata.common.title || file.name.split('.').slice(0, -1).join('.'),
-							artist: metadata.common.artist || 'Unknown Artist',
-							album: metadata.common.album || 'Unknown Album',
-							year: metadata.common.year || 0,
-							genre: Array.isArray(metadata.common.genre)
+			let successCount = 0;
+			for (const file of audioFiles) {
+				i++;
+				toast(`${i} of ${audioFiles.length} | Processing ${file.name}`);
+				await yieldToUI();
+
+				try {
+					const metadata = await parseMetadataWithTimeout(file);
+					const track: Song = {
+						id: uuidv4(),
+						title: metadata?.common.title || file.name.split('.').slice(0, -1).join('.'),
+						artist: metadata?.common.artist || 'Unknown Artist',
+						album: metadata?.common.album || 'Unknown Album',
+						year: metadata?.common.year || 0,
+						genre: metadata?.common.genre
+							? Array.isArray(metadata.common.genre)
 								? metadata.common.genre[0]
-								: metadata.common.genre || 'Unknown Genre',
-							duration: metadata.format.duration || 0,
-							image: metadata.common.picture
-								? new Blob([metadata.common.picture[0].data.slice()], {
-										type: metadata.common.picture[0].format
-									})
-								: blob,
-							trackNumber: metadata.common.track?.no ?? 0,
-							disk: metadata.common.disk?.no ?? 0,
-							ext: file.name.split('.').pop() || 'mp3',
-							fileName: file.name
-						};
+								: metadata.common.genre
+							: 'Unknown Genre',
+						duration: metadata?.format.duration || 0,
+						image: metadata?.common.picture
+							? new Blob([metadata.common.picture[0].data.slice()], {
+									type: metadata.common.picture[0].format
+								})
+							: blob,
+						trackNumber: metadata?.common.track?.no ?? 0,
+						disk: metadata?.common.disk?.no ?? 0,
+						ext: file.name.split('.').pop() || 'mp3',
+						fileName: file.name
+					};
 
-						const album: Album = {
-							id: uuidv4(),
-							name: metadata.common.album || 'Unknown Album',
-							artist: metadata.common.artist || 'Unknown Artist',
-							year: metadata.common.year || 0,
-							genre: Array.isArray(metadata.common.genre)
+					const album: Album = {
+						id: uuidv4(),
+						name: metadata?.common.album || 'Unknown Album',
+						artist: metadata?.common.artist || 'Unknown Artist',
+						year: metadata?.common.year || 0,
+						genre: metadata?.common.genre
+							? Array.isArray(metadata.common.genre)
 								? metadata.common.genre[0]
-								: metadata.common.genre || 'Unknown Genre',
-							image: metadata.common.picture
-								? new Blob([metadata.common.picture[0].data.slice()], {
-										type: metadata.common.picture[0].format
-									})
-								: blob
-						};
+								: metadata.common.genre
+							: 'Unknown Genre',
+						image: metadata?.common.picture
+							? new Blob([metadata.common.picture[0].data.slice()], {
+									type: metadata.common.picture[0].format
+								})
+							: blob
+					};
 
-						const artist: Artist = {
-							id: uuidv4(),
-							name: metadata.common.artist || 'Unknown Artist'
-						};
+					const artist: Artist = {
+						id: uuidv4(),
+						name: metadata?.common.artist || 'Unknown Artist'
+					};
 
-						await OPFS.addAlbum(album, track.id);
-						await OPFS.addArtist(artist, track.id, track.album);
-						await OPFS.addTrack(track);
-						await OPFS.addFile(track.id, file);
-						statsManager.recordLibraryAdd(track.id);
-					} catch (error) {
-						console.error(`Error processing file ${file.name}:`, error);
-					}
+					await OPFS.addAlbum(album, track.id);
+					await OPFS.addArtist(artist, track.id, track.album);
+					await OPFS.addTrack(track);
+					await OPFS.addFile(track.id, file);
+					statsManager.recordLibraryAdd(track.id);
+					successCount++;
+				} catch (error) {
+					console.error(`Error processing file ${file.name}:`, error);
 				}
 			}
 			await refreshLibrary();
 			const tracks = await OPFS.get().tracks();
 			statsManager.setLibrarySize(tracks.length);
-			toast.success(`Library added successfully!`);
+			if (successCount > 0) {
+				toast.success(`Library added successfully! (${successCount} tracks)`);
+			} else {
+				toast.error('No tracks could be processed. Please try again.');
+			}
 		};
 
-		if (window.showDirectoryPicker && !mobileFiles) {
+		if (isDirectoryPickerSupported() && !mobileFiles) {
 			const dirHandle: FileSystemDirectoryHandle = await window.showDirectoryPicker();
 			const files: File[] = [];
 
@@ -128,13 +181,28 @@ export async function createLibrary(mobileFiles?: FileList): Promise<void> {
 		} else {
 			if (mobileFiles) {
 				await handleFiles(mobileFiles);
-			} else if (input.files) {
+			} else if (input && input.files && input.files.length > 0) {
 				await handleFiles(input.files);
+			} else if (!window.showDirectoryPicker) {
+				toast.error(
+					'Directory picker is not supported on mobile. Please use the Upload button in Settings.'
+				);
+				return;
+			} else {
+				toast.error('No files selected. Please try again.');
+				return;
 			}
 		}
 	} catch (error) {
 		console.error('Error in createLibrary:', error);
-		toast.error('Failed to create library');
+		if (error instanceof Error) {
+			if (error.name === 'AbortError') {
+				return;
+			}
+			toast.error(`Failed to create library: ${error.message}`);
+		} else {
+			toast.error('Failed to create library. Please try again.');
+		}
 	}
 }
 
@@ -152,7 +220,6 @@ async function processAlbumDirectory(
 			break;
 		}
 	}
-	// this should be illegal, but whatever
 	if (isMultiDisc) {
 		for await (const discEntry of albumDir.values()) {
 			if (discEntry.kind === 'directory' && discEntry.name.toLowerCase().includes('disc')) {

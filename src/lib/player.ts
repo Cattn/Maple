@@ -19,6 +19,100 @@ import {
 import { statsManager } from '$lib/stats';
 import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
+import { UserManager } from './api/UserManager';
+import { SERVER } from '$lib/api/server';
+
+let mediaSessionInitialized = false;
+
+function initMediaSession() {
+	if (!browser || mediaSessionInitialized || !('mediaSession' in navigator)) return;
+	mediaSessionInitialized = true;
+
+	navigator.mediaSession.setActionHandler('play', () => {
+		const state = get(audioPlayer);
+		if (state.audio instanceof HTMLAudioElement && !state.playing) {
+			togglePlay();
+		}
+	});
+
+	navigator.mediaSession.setActionHandler('pause', () => {
+		const state = get(audioPlayer);
+		if (state.audio instanceof HTMLAudioElement && state.playing) {
+			togglePlay();
+		}
+	});
+
+	navigator.mediaSession.setActionHandler('previoustrack', () => {
+		previous();
+	});
+
+	navigator.mediaSession.setActionHandler('nexttrack', () => {
+		next();
+	});
+
+	navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+		const state = get(audioPlayer);
+		if (state.audio instanceof HTMLAudioElement) {
+			const skipTime = details.seekOffset || 10;
+			seekTo(Math.max(state.audio.currentTime - skipTime, 0));
+		}
+	});
+
+	navigator.mediaSession.setActionHandler('seekforward', (details) => {
+		const state = get(audioPlayer);
+		if (state.audio instanceof HTMLAudioElement) {
+			const skipTime = details.seekOffset || 10;
+			seekTo(Math.min(state.audio.currentTime + skipTime, state.audio.duration || 0));
+		}
+	});
+
+	navigator.mediaSession.setActionHandler('seekto', (details) => {
+		if (details.seekTime !== undefined) {
+			seekTo(details.seekTime);
+		}
+	});
+
+	navigator.mediaSession.setActionHandler('stop', () => {
+		const state = get(audioPlayer);
+		if (state.audio instanceof HTMLAudioElement) {
+			state.audio.pause();
+			state.audio.currentTime = 0;
+			audioPlayer.update((value) => ({ ...value, playing: false, currentTime: 0 }));
+		}
+	});
+}
+
+function updateMediaSessionMetadata(song: Song, artworkUrl?: string) {
+	if (!browser || !('mediaSession' in navigator)) return;
+	initMediaSession();
+
+	const artwork: MediaImage[] = artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : [];
+
+	navigator.mediaSession.metadata = new MediaMetadata({
+		title: song.title || 'Unknown Title',
+		artist: song.artist || 'Unknown Artist',
+		album: song.album || 'Unknown Album',
+		artwork
+	});
+}
+
+function updateMediaSessionPlaybackState(playing: boolean) {
+	if (!browser || !('mediaSession' in navigator)) return;
+	navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+}
+
+function updateMediaSessionPositionState(audio: HTMLAudioElement) {
+	if (!browser || !('mediaSession' in navigator) || !audio.duration || !isFinite(audio.duration)) return;
+	try {
+		navigator.mediaSession.setPositionState({
+			duration: audio.duration,
+			playbackRate: audio.playbackRate,
+			position: audio.currentTime
+		});
+	} catch {
+
+	}
+}
 
 type QueueSourceState = QueueSnapshot['source'];
 
@@ -29,6 +123,84 @@ function updateQueue(items: Song[], index: number, source?: QueueSourceState) {
 		source: source ?? { type: 'custom', id: undefined, label: undefined }
 	});
 	context.set(items);
+}
+
+async function getImageFile(imagePath: string): Promise<File> {
+	const response = await OPFS.get().image(imagePath);
+	const arrayBuffer = await response.arrayBuffer();
+	return new File([arrayBuffer], imagePath, { type: 'image/jpeg' });
+}
+
+async function uploadAlbumArt(song: Song): Promise<boolean> {
+	const isLoggedIn = await UserManager.isLoggedIn();
+	if (!isLoggedIn) return false;
+
+	if (!song.image || typeof song.image !== 'string') return false;
+
+	try {
+		const image = await getImageFile(song.image);
+		const imageBuffer = await image.arrayBuffer();
+		const imageFile = new File([imageBuffer], 'album.jpg', { type: 'image/jpeg' });
+		await UserManager.setAlbumArt(imageFile);
+		return true;
+	} catch (error) {
+		console.error('Error uploading album art:', error);
+		return false;
+	}
+}
+
+async function sendWebhook(song: Song) {
+	if (!UserSettings.webhook.enabled || !UserSettings.webhook.url) return;
+
+	const isLoggedIn = await UserManager.isLoggedIn();
+	if (!isLoggedIn) return;
+
+	if (!song.image || typeof song.image !== 'string') return;
+
+	try {
+		const image = await getImageFile(song.image);
+		const user = get(SavedUser);
+		const formData = new FormData();
+		formData.append('file', image, 'album.jpg');
+		formData.append(
+			'payload_json',
+			JSON.stringify({
+				embeds: [
+					{
+						title: 'Now Playing',
+						description: `**${song.title}** by ${song.artist}`,
+						color: 0x8f4a4c,
+						fields: [
+							{
+								name: 'Album',
+								value: song.album
+							},
+							{
+								name: 'Year',
+								value: song.year ? song.year.toString() : 'N/A'
+							},
+							{
+								name: 'Track Number',
+								value: song.trackNumber ? song.trackNumber.toString() : 'N/A'
+							}
+						],
+						image: {
+							url: 'attachment://album.jpg'
+						}
+					}
+				],
+				username: user?.name || 'User',
+				avatar_url: `${SERVER}/public/get/pfp/${user?.id}`
+			})
+		);
+
+		await fetch(UserSettings.webhook.url, {
+			method: 'POST',
+			body: formData
+		});
+	} catch (error) {
+		console.error('Error sending webhook:', error);
+	}
 }
 
 async function emitNowPlaying(song: Song) {
@@ -46,6 +218,12 @@ async function emitNowPlaying(song: Song) {
 		source: 'Web'
 	};
 	s.emit('nowPlaying', { nowPlaying: payload });
+
+	const artworkUploaded = await uploadAlbumArt(song);
+	const artworkUrl = artworkUploaded ? `${SERVER}/public/get/albumArt/${user.id}/${crypto.randomUUID()}` : undefined;
+	updateMediaSessionMetadata(song, artworkUrl);
+
+	await sendWebhook(song);
 }
 
 async function playAtIndex(index: number) {
@@ -71,10 +249,14 @@ async function playAtIndex(index: number) {
 			audio.src = audioUrl;
 			audio.currentTime = 0;
 			audio.play();
+			audio.addEventListener('loadedmetadata', () => {
+				updateMediaSessionPositionState(audio);
+			}, { once: true });
 			return { ...value, audio, playing: true, currentTime: 0, onEnded: next };
 		}
 		return value;
 	});
+	updateMediaSessionPlaybackState(true);
 	await emitNowPlaying(song);
 }
 
@@ -121,6 +303,7 @@ export async function next() {
 			}
 			return { ...value, playing: false };
 		});
+		updateMediaSessionPlaybackState(false);
 		return;
 	}
 	statsManager.recordSkip();
@@ -141,6 +324,7 @@ export function togglePlay() {
 	} else {
 		statsManager.recordResume();
 	}
+	const newPlayingState = !state.playing;
 	audioPlayer.update((value) => {
 		if (value.audio instanceof HTMLAudioElement) {
 			if (value.playing) {
@@ -148,11 +332,13 @@ export function togglePlay() {
 			} else {
 				value.audio.play();
 			}
-			return { ...value, playing: !value.playing, currentTime: value.audio.currentTime };
+			updateMediaSessionPositionState(value.audio);
+			return { ...value, playing: newPlayingState, currentTime: value.audio.currentTime };
 		}
 		return value;
 	});
-}
+	updateMediaSessionPlaybackState(newPlayingState);
+} 
 
 export function setVolumeLevel(volume: number) {
 	audioPlayer.update((value) => ({ ...value, volume, changeVolume: true }));
@@ -164,6 +350,7 @@ export function seekTo(time: number) {
 	audioPlayer.update((value) => {
 		if (value.audio instanceof HTMLAudioElement) {
 			value.audio.currentTime = time;
+			updateMediaSessionPositionState(value.audio);
 			return { ...value, currentTime: time };
 		}
 		return value;

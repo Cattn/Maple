@@ -1,26 +1,50 @@
 <script lang="ts">
 	import { Card, Button } from 'm3-svelte';
 	import ColorPicker from 'svelte-awesome-color-picker';
-	import { isLoggedIn, UserInfo, SavedUser } from '$lib/store';
+	import { isLoggedIn, UserInfo, SavedUser, socket } from '$lib/store';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { title } from '$lib/store';
 	import { themeSettings, setThemeSettings, persistThemeSettings } from '$lib/theme/theme';
+	import { UserManager } from '$lib/api/UserManager';
+	import UserSettings from '$lib/preferences/usersettings';
+	import { Settings } from '$lib/preferences/fetch';
+	import { io } from 'socket.io-client';
+	import { SERVER } from '$lib/api/server';
+	import { socketManager } from '$lib/socketManager';
+	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
+	import { OPFS } from '$lib/opfs';
+	import { createLibrary } from '$lib/library';
 
 	let name = $state('');
 	let initialName = $state('');
-	let webhookEnabled = $state(false);
-	let initialWebhookEnabled = $state(false);
-	let webhookUrl = $state('');
-	let initialWebhookUrl = $state('');
-	let discordRpcEnabled = $state(false);
-	let initialDiscordRpcEnabled = $state(false);
+	const webhookSettings = new Settings('webhook');
+	const initialWebhookEnabledValue =
+		webhookSettings.get('enabled') !== null ? webhookSettings.get('enabled') : false;
+	let webhookEnabled = $state(initialWebhookEnabledValue);
+	let initialWebhookEnabled = $state(initialWebhookEnabledValue);
+	const initialWebhookUrlValue =
+		webhookSettings.get('url') !== null ? webhookSettings.get('url') : '';
+	let webhookUrl = $state(initialWebhookUrlValue);
+	let initialWebhookUrl = $state(initialWebhookUrlValue);
+	const discordSettings = new Settings('discord');
+	const initialDiscordRpcValue =
+		discordSettings.get('enabled') !== null ? discordSettings.get('enabled') : false;
+	let discordRpcEnabled = $state(initialDiscordRpcValue);
+	let initialDiscordRpcEnabled = $state(initialDiscordRpcValue);
 	let p2pTransfersEnabled = $state(true);
 	let initialP2pTransfersEnabled = $state(true);
-	let socketCommunicationEnabled = $state(true);
-	let initialSocketCommunicationEnabled = $state(true);
-	let jellyfinModeEnabled = $state(false);
-	let initialJellyfinModeEnabled = $state(false);
+	const preferencesSettings = new Settings('preferences');
+	const initialSocketValue =
+		preferencesSettings.get('socket') !== null ? preferencesSettings.get('socket') : true;
+	let socketCommunicationEnabled = $state(initialSocketValue);
+	let initialSocketCommunicationEnabled = $state(initialSocketValue);
+	const initialJellyfinValue =
+		preferencesSettings.get('jellyfinMode') !== null
+			? preferencesSettings.get('jellyfinMode')
+			: false;
+	let jellyfinModeEnabled = $state(initialJellyfinValue);
+	let initialJellyfinModeEnabled = $state(initialJellyfinValue);
 	let loggingEnabled = $state(false);
 	let initialLoggingEnabled = $state(false);
 	let developerModeEnabled = $state(false);
@@ -32,9 +56,19 @@
 	let initialThemeDarkMode = $state(initialTheme.isDarkMode);
 	let themePreviewColor = $derived(themeSourceColor ?? initialThemeSourceColor);
 	let themeInitialized = false;
+
+	let pfpFile = $state<File | null>(null);
+	let pfpPreview = $state<string | null>(null);
+	let pfpUploading = $state(false);
+	let fileInput: HTMLInputElement;
+
+	let mobileFileInput: HTMLInputElement;
+	let mobileUploading = $state(false);
+	let trackCount = $state(0);
+
 	$effect(() => {
-		name = $UserInfo?.name ?? '';
-		initialName = $UserInfo?.name ?? '';
+		name = $SavedUser?.name ?? '';
+		initialName = $SavedUser?.name ?? '';
 	});
 
 	$effect(() => {
@@ -59,6 +93,22 @@
 		}
 	});
 
+	const handleFileSelect = (e: Event) => {
+		const target = e.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (file) {
+			if (file.size > 3 * 1024 * 1024) {
+				return;
+			}
+			pfpFile = file;
+			const reader = new FileReader();
+			reader.onload = () => {
+				pfpPreview = reader.result as string;
+			};
+			reader.readAsDataURL(file);
+		}
+	};
+
 	let hasChanges = $derived(
 		name !== initialName ||
 			webhookEnabled !== initialWebhookEnabled ||
@@ -70,18 +120,122 @@
 			loggingEnabled !== initialLoggingEnabled ||
 			developerModeEnabled !== initialDeveloperModeEnabled ||
 			themePreviewColor !== initialThemeSourceColor ||
-			themeDarkMode !== initialThemeDarkMode
+			themeDarkMode !== initialThemeDarkMode ||
+			pfpFile !== null
 	);
 
-	const saveChanges = () => {
+	const saveChanges = async () => {
+		if (pfpFile) {
+			pfpUploading = true;
+			const result = await UserManager.updateProfilePicture(pfpFile);
+			pfpUploading = false;
+			if (result.error) {
+				return;
+			}
+			pfpFile = null;
+			pfpPreview = null;
+		}
+
+		if (name !== initialName) {
+			const result = await UserManager.updateDisplayName(name);
+			if (result.error) {
+				return;
+			}
+			initialName = name;
+		}
+
+		if (socketCommunicationEnabled !== initialSocketCommunicationEnabled) {
+			preferencesSettings.set('socket', socketCommunicationEnabled);
+			UserSettings.preferences.socket = socketCommunicationEnabled;
+
+			const currentSocket = get(socket);
+			const isLoggedInValue = get(isLoggedIn);
+
+			if (socketCommunicationEnabled) {
+				if (!isLoggedInValue) {
+					socketCommunicationEnabled = false;
+					initialSocketCommunicationEnabled = false;
+					return;
+				}
+				if (!currentSocket || !currentSocket.connected) {
+					const io2 = io(`${SERVER}`, {
+						withCredentials: true
+					});
+					socket.set(io2);
+					const newSocket = get(socket);
+					newSocket?.on('connect', () => {
+						console.log('Connected to server');
+					});
+					socketManager();
+					refreshFriends();
+					refreshRequests();
+				}
+			} else {
+				if (currentSocket) {
+					currentSocket.disconnect();
+					socket.set(null);
+				}
+			}
+			initialSocketCommunicationEnabled = socketCommunicationEnabled;
+		}
+
+		if (jellyfinModeEnabled !== initialJellyfinModeEnabled) {
+			preferencesSettings.set('jellyfinMode', jellyfinModeEnabled);
+			UserSettings.preferences.jellyfinMode = jellyfinModeEnabled;
+			initialJellyfinModeEnabled = jellyfinModeEnabled;
+		}
+
+		if (webhookEnabled !== initialWebhookEnabled || webhookUrl !== initialWebhookUrl) {
+			webhookSettings.set('enabled', webhookEnabled);
+			webhookSettings.set('url', webhookUrl);
+			UserSettings.webhook.enabled = webhookEnabled;
+			UserSettings.webhook.url = webhookUrl;
+			initialWebhookEnabled = webhookEnabled;
+			initialWebhookUrl = webhookUrl;
+		}
+
+		if (discordRpcEnabled !== initialDiscordRpcEnabled) {
+			discordSettings.set('enabled', discordRpcEnabled);
+			UserSettings.discord.enabled = discordRpcEnabled;
+			initialDiscordRpcEnabled = discordRpcEnabled;
+		}
+
 		const sourceColor = themePreviewColor;
 		persistThemeSettings({ sourceColor, isDarkMode: themeDarkMode });
 		initialThemeSourceColor = sourceColor;
 		initialThemeDarkMode = themeDarkMode;
 	};
 
+	const handleMobileFileSelect = async (e: Event) => {
+		const target = e.target as HTMLInputElement;
+		const files = target.files;
+		if (files && files.length > 0) {
+			mobileUploading = true;
+			try {
+				await createLibrary(files);
+				const tracks = await OPFS.get().tracks();
+				trackCount = tracks.length;
+			} finally {
+				mobileUploading = false;
+				if (mobileFileInput) {
+					mobileFileInput.value = '';
+				}
+			}
+		}
+	};
+
+	const refreshTrackCount = async () => {
+		try {
+			const tracks = await OPFS.get().tracks();
+			trackCount = tracks.length;
+		} catch {
+			trackCount = 0;
+		}
+	};
+
 	onMount(async () => {
 		title.set('Settings');
+		await refreshTrackCount();
 	});
 </script>
 
@@ -108,7 +262,20 @@
 				<Card variant="outlined" class="flex flex-col gap-6 p-6">
 					<div class="flex flex-col gap-6 sm:flex-row sm:items-center">
 						<div class="relative flex items-center justify-center">
-							{#if $SavedUser?.pfp}
+							<input
+								type="file"
+								accept="image/jpeg,image/png,image/gif"
+								class="hidden"
+								bind:this={fileInput}
+								onchange={handleFileSelect}
+							/>
+							{#if pfpPreview}
+								<img
+									src={pfpPreview}
+									alt="Profile Preview"
+									class="ring-primary/20 h-28 w-28 rounded-full object-cover ring-2"
+								/>
+							{:else if $SavedUser?.pfp}
 								<img
 									src={$SavedUser?.pfp}
 									alt="Profile"
@@ -128,14 +295,17 @@
 							{/if}
 							<button
 								type="button"
-								class="bg-surface text-primary ring-outline hover:bg-surface-container-high absolute -bottom-3 flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shadow-md ring-1"
+								onclick={() => fileInput.click()}
+								disabled={pfpUploading}
+								class="bg-surface text-primary ring-outline hover:bg-surface-container-high absolute -bottom-3 flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shadow-md ring-1 disabled:opacity-50"
 							>
 								<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
 									><path
 										fill="currentColor"
 										d="M8 17h8v-.55q0-1.125-1.1-1.787T12 14t-2.9.663T8 16.45zm4-4q.825 0 1.413-.587T14 11t-.587-1.412T12 9t-1.412.588T10 11t.588 1.413T12 13m-8 8q-.825 0-1.412-.587T2 19V7q0-.825.588-1.412T4 5h3.15L9 3h6l1.85 2H20q.825 0 1.413.588T22 7v12q0 .825-.587 1.413T20 21zm0-2h16V7h-4.05l-1.825-2h-4.25L8.05 7H4zm8-6"
 									/></svg
-								> Change photo
+								>
+								{#if pfpUploading}Uploading...{:else}Change photo{/if}
 							</button>
 						</div>
 
@@ -431,6 +601,73 @@
 										class="bg-surface absolute top-0.5 left-0.5 h-5 w-5 rounded-full shadow-sm transition peer-checked:translate-x-5"
 									></span>
 								</label>
+							</div>
+							<div class="ring-outline/30 border-outline/30 mt-3 border-t pt-4">
+								<input
+									type="file"
+									accept="audio/*"
+									multiple
+									class="hidden"
+									bind:this={mobileFileInput}
+									onchange={handleMobileFileSelect}
+								/>
+								<div class="flex items-center justify-between gap-4">
+									<div class="flex flex-col gap-1">
+										<p class="text-on-surface-variant text-sm font-semibold">
+											Upload Music (Mobile)
+										</p>
+										<p class="text-on-surface-variant text-xs">
+											Upload audio files directly to your library.
+										</p>
+										<p class="text-primary mt-1 text-sm font-semibold">
+											{trackCount}
+											{trackCount === 1 ? 'track' : 'tracks'} in library
+										</p>
+									</div>
+									<button
+										type="button"
+										onclick={() => mobileFileInput.click()}
+										disabled={mobileUploading}
+										class="bg-primary text-on-primary hover:bg-primary/90 flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition disabled:opacity-50"
+									>
+										{#if mobileUploading}
+											<svg
+												class="h-4 w-4 animate-spin"
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+											>
+												<circle
+													class="opacity-25"
+													cx="12"
+													cy="12"
+													r="10"
+													stroke="currentColor"
+													stroke-width="4"
+												></circle>
+												<path
+													class="opacity-75"
+													fill="currentColor"
+													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+												></path>
+											</svg>
+											Uploading...
+										{:else}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="18"
+												height="18"
+												viewBox="0 0 24 24"
+											>
+												<path
+													fill="currentColor"
+													d="M11 16V7.85l-2.6 2.6L7 9l5-5l5 5l-1.4 1.45l-2.6-2.6V16zm-5 4q-.825 0-1.412-.587T4 18v-3h2v3h12v-3h2v3q0 .825-.587 1.413T18 20z"
+												/>
+											</svg>
+											Upload
+										{/if}
+									</button>
+								</div>
 							</div>
 						</div>
 					</div>
