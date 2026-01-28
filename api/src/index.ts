@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from '@elysiajs/cors'
 import { auth } from "./auth";
+import { getRoute, publicGetRoute, userFriendsRoute, peerjsRoute } from "./routes";
 
 const app = new Elysia()
     .use(
@@ -11,7 +12,11 @@ const app = new Elysia()
             allowedHeaders: ['Content-Type', 'Authorization']
         })
     )
-    .mount(auth.handler)
+    .all("/api/auth/*", (c) => auth.handler(c.request))
+    .use(getRoute)
+    .use(publicGetRoute)
+    .use(userFriendsRoute)
+    .use(peerjsRoute)
     .listen(3000)
 
 console.log(
