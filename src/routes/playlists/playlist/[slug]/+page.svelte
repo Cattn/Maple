@@ -203,20 +203,18 @@
 	<div class="w-full md:w-1/2 lg:w-2/5">
 		{#if playlist?.image}
 			{#await OPFS.getImageUrl(playlist.image as string) then imageUrl}
-				<img
-					src={imageUrl}
-					alt={playlist?.name}
-					class="mx-auto aspect-square w-full max-w-sm rounded-lg object-cover shadow-md md:mx-0"
-				/>
+				<div class="aspect-square max-w-sm w-full">
+					<img
+						src={imageUrl}
+						alt={playlist?.name}
+						class="w-full h-full rounded-lg object-cover shadow-md"
+					/>
+				</div>
 			{:catch}
-				<div
-					class="bg-surface-container mx-auto aspect-square w-full max-w-sm rounded-lg md:mx-0"
-				></div>
+				<div class="bg-surface-container aspect-square max-w-sm w-full rounded-lg"></div>
 			{/await}
 		{:else}
-			<div
-				class="bg-surface-container mx-auto aspect-square w-full max-w-sm rounded-lg md:mx-0"
-			></div>
+			<div class="bg-surface-container aspect-square max-w-sm w-full rounded-lg"></div>
 		{/if}
 		{#if editModeOn}
 			<div class="mt-4 space-y-2">

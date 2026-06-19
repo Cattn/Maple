@@ -32,7 +32,7 @@
 <div class="mt-5 flex w-full flex-col">
 	<h1 class="ml-4 text-2xl font-bold md:ml-10">Recently Played</h1>
 	<div
-		class="mx-4 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2"
+		class="mr-8 ml-2 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-1 lg:grid-cols-4 lg:gap-x-1 xl:grid-cols-5 xl:gap-x-1"
 	>
 		{#each recent as track}
 			<Track {track} queue={recent} queueSource={{ type: 'recent', label: 'Recently Played' }} />

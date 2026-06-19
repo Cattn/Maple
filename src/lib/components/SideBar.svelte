@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createLibrary } from '$lib/library';
-	import { SavedUser } from '$lib/store';
+	import { SavedUser, isLoggedIn } from '$lib/store';
 
 	const isActive = (path: string) => page.url.pathname === path;
 </script>
@@ -15,7 +15,7 @@
 		<div class="mt-3 mb-3 flex flex-col items-center justify-center gap-2">
 			<button
 				type="button"
-				onclick={() => goto('/settings')}
+				onclick={() => goto($isLoggedIn ? '/settings' : '/login')}
 				class="bg-primary text-on-primary hover:bg-primary/90 flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-colors"
 			>
 				{#if $SavedUser?.pfp}

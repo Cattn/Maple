@@ -404,7 +404,7 @@
 						onclick={handleTrackClick}
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
-						class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+						class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 						><path
 							fill="currentColor"
 							d="M17.5 20q-1.05 0-1.775-.725T15 17.5t.725-1.775T17.5 15q.2 0 .45.038t.55.162V11q0-.425.288-.712T19.5 10H21q.425 0 .713.288T22 11t-.288.713T21 12h-1v5.5q0 1.05-.725 1.775T17.5 20M11 12q-1.65 0-2.825-1.175T7 8t1.175-2.825T11 4t2.825 1.175T15 8t-1.175 2.825T11 12m-7 8q-.425 0-.712-.288T3 19v-1.8q0-.875.438-1.575T4.6 14.55q1.55-.775 3.15-1.162T11 13q.7 0 1.388.075t1.387.225q.425.1.537.525t-.237.775q-.525.625-.788 1.363t-.262 1.537q0 .325.038.638t.137.637q.125.45-.112.838t-.663.387z"
@@ -417,7 +417,7 @@
 					<img
 						onclick={handleTrackClick}
 						src={DEFAULT_PLACEHOLDER}
-						class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+						class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 						alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
 							'' ||
 							album?.artist ||
@@ -433,7 +433,7 @@
 				<img
 					onclick={handleTrackClick}
 					src={imageUrl}
-					class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+					class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 					alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
 						'' ||
 						album?.artist ||
@@ -449,7 +449,7 @@
 						onclick={handleTrackClick}
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
-						class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+						class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 						><path
 							fill="currentColor"
 							d="M17.5 20q-1.05 0-1.775-.725T15 17.5t.725-1.775T17.5 15q.2 0 .45.038t.55.162V11q0-.425.288-.712T19.5 10H21q.425 0 .713.288T22 11t-.288.713T21 12h-1v5.5q0 1.05-.725 1.775T17.5 20M11 12q-1.65 0-2.825-1.175T7 8t1.175-2.825T11 4t2.825 1.175T15 8t-1.175 2.825T11 12m-7 8q-.425 0-.712-.288T3 19v-1.8q0-.875.438-1.575T4.6 14.55q1.55-.775 3.15-1.162T11 13q.7 0 1.388.075t1.387.225q.425.1.537.525t-.237.775q-.525.625-.788 1.363t-.262 1.537q0 .325.038.638t.137.637q.125.45-.112.838t-.663.387z"
@@ -461,7 +461,7 @@
 					<img
 						onclick={handleTrackClick}
 						src={DEFAULT_PLACEHOLDER}
-						class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+						class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 						alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
 							'' ||
 							album?.artist ||
@@ -477,7 +477,7 @@
 			onclick={handleTrackClick}
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 24 24"
-			class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+			class="text-primary bg-primary-container h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 			><path
 				fill="currentColor"
 				d="M17.5 20q-1.05 0-1.775-.725T15 17.5t.725-1.775T17.5 15q.2 0 .45.038t.55.162V11q0-.425.288-.712T19.5 10H21q.425 0 .713.288T22 11t-.288.713T21 12h-1v5.5q0 1.05-.725 1.775T17.5 20M11 12q-1.65 0-2.825-1.175T7 8t1.175-2.825T11 4t2.825 1.175T15 8t-1.175 2.825T11 12m-7 8q-.425 0-.712-.288T3 19v-1.8q0-.875.438-1.575T4.6 14.55q1.55-.775 3.15-1.162T11 13q.7 0 1.388.075t1.387.225q.425.1.537.525t-.237.775q-.525.625-.788 1.363t-.262 1.537q0 .325.038.638t.137.637q.125.45-.112.838t-.663.387z"
@@ -489,7 +489,7 @@
 		<img
 			onclick={handleTrackClick}
 			src={DEFAULT_PLACEHOLDER}
-			class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+			class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 			alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
 				'' ||
 				album?.artist ||
@@ -497,9 +497,16 @@
 			draggable="false"
 		/>
 	{/if}
-	<div class="flex max-w-[90%] flex-col select-none md:max-w-full">
-		<p class="song-titles mt-2">{track?.title || playlist?.name || album?.name || artist?.name}</p>
-		<p class="song-artists">{track?.artist || '' || album?.artist || ''}</p>
+	<div class="flex w-44 flex-col select-none md:w-60 lg:w-64">
+		<p
+			class="song-titles mt-2"
+			title={track?.title || playlist?.name || album?.name || artist?.name || ''}
+		>
+			{track?.title || playlist?.name || album?.name || artist?.name}
+		</p>
+		<p class="song-artists" title={track?.artist || '' || album?.artist || ''}>
+			{track?.artist || '' || album?.artist || ''}
+		</p>
 	</div>
 </div>
 
@@ -523,6 +530,10 @@
 			'YTFI' 728,
 			'YTLC' 514,
 			'YTUC' 712;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		width: 100%;
 	}
 
 	.song-artists {
@@ -544,6 +555,10 @@
 			'YTFI' 728,
 			'YTLC' 514,
 			'YTUC' 712;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		width: 100%;
 	}
 
 	@media (min-width: 768px) {

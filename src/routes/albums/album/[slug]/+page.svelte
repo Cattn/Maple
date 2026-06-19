@@ -188,7 +188,7 @@
 	});
 </script>
 
-<div class="flex flex-col gap-8 pt-4 pr-3 pl-3 md:flex-row md:pt-14 md:pr-20 md:pl-14 lg:pl-28">
+<div class="flex flex-col gap-8 pt-4 pr-3 pl-3 md:flex-row md:pt-14 md:pr-20 md:pl-14 lg:pl-28 mb-5 md:mb-0">
 	<div class="w-full md:w-1/2 lg:w-2/5">
 		{#if imageUrl}
 			<img

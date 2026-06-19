@@ -43,14 +43,14 @@
 />
 
 <div
-	class="mr-5 mb-10 ml-2 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2"
+	class="mr-5 mb-10 ml-2 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-1 lg:grid-cols-4 lg:gap-x-1 xl:grid-cols-5 xl:gap-x-1"
 >
 	<div class="mt-4 ml-4 flex w-full flex-col md:mt-5 md:ml-10">
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			onclick={createPlaylist}
-			class="bg-primary-container text-primary flash-slow flex h-44 w-44 cursor-pointer items-center justify-center rounded-lg transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-52 md:w-52"
+			class="bg-primary-container text-primary flash-slow flex h-44 w-44 cursor-pointer items-center justify-center rounded-lg transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:h-60 md:w-60 lg:h-64 lg:w-64"
 		>
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-16 w-16">
 				<path

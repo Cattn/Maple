@@ -237,7 +237,7 @@
 		ondrop={onDrop}
 		ondragend={onDragEnd}
 	>
-		<div class="flex min-w-0 items-center gap-4">
+		<div class="flex min-w-0 flex-1 items-center gap-4 overflow-hidden">
 			<span class="text-on-surface-variant w-8 shrink-0 text-right text-sm tabular-nums"
 				>{index}</span
 			>
@@ -245,12 +245,14 @@
 				{#if track.image}
 					{#await OPFS.getImageUrl(track.image as string) then imageUrl}
 						<Lazy height={40} keep={true}>
-							<img
-								src={imageUrl}
-								alt="{track.title} - {track.artist}"
-								class="h-10 w-10 shrink-0 rounded-md object-cover"
-								draggable="false"
-							/>
+							<div class="h-10 w-10 shrink-0">
+								<img
+									src={imageUrl}
+									alt="{track.title} - {track.artist}"
+									class="h-full w-full rounded-md object-cover"
+									draggable="false"
+								/>
+							</div>
 						</Lazy>
 					{:catch}
 						<Lazy height={40} keep={true}>
@@ -263,9 +265,9 @@
 					</Lazy>
 				{/if}
 			{/if}
-			<div class="min-w-0 flex-1">
-				<p class="text-on-surface truncate">{track.title}</p>
-				<p class="text-on-surface-variant truncate text-sm">{track.artist}</p>
+			<div class="min-w-0 flex-1 overflow-hidden">
+				<p class="text-on-surface truncate" title={track.title}>{track.title}</p>
+				<p class="text-on-surface-variant truncate text-sm" title={track.artist}>{track.artist}</p>
 			</div>
 		</div>
 		<div class="flex items-center gap-2">
@@ -386,3 +388,14 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.text-on-surface.truncate,
+	.text-on-surface-variant.truncate {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 100%;
+		display: block;
+	}
+</style>

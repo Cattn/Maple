@@ -31,7 +31,7 @@
 />
 
 <div
-	class="mx-4 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-2 xl:grid-cols-5 xl:gap-x-2"
+	class="mr-8 ml-2 mb-10 md:mb-0 grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:mx-16 md:grid-cols-3 md:gap-x-1 lg:grid-cols-4 lg:gap-x-1 xl:grid-cols-5 xl:gap-x-1"
 >
 	{#each sortedArtists as artist (artist.id)}
 		<div class="will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>

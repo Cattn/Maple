@@ -56,7 +56,7 @@ var options = {
 
 const slower = slowDown({
 	windowMs: 2 * 60 * 1000,
-	delayAfter: 5,
+	delayAfter: 50,
 	delayMs: (hits) => {
 		if (hits <= 15) return hits * 100;
 		return (hits - 15) * 1000 + 2000;
@@ -66,7 +66,7 @@ const slower = slowDown({
 
 const limiter = rateLimit({
 	windowMs: 2 * 60 * 1000,
-	limit: 35,
+	limit: 100,
 })
 
 try {
