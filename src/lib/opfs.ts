@@ -279,8 +279,7 @@ export class OPFS {
 	}
 
 	public static async getSong(track: Song) {
-		const audioArrayBuffer = await file(`/tracks/${track.id}.${track.ext}`).arrayBuffer();
-		return new Response(audioArrayBuffer);
+		return file(`/tracks/${track.id}.${track.ext}`).getOriginFile();
 	}
 
 	public static async addPlaylist(playlist: Playlist) {

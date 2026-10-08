@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
 			// Disable PWA in dev to avoid SW interfering with HMR
 			!isDevelopment &&
 				SvelteKitPWA({
-					registerType: 'autoUpdate',
+					registerType: 'prompt',
 					manifest,
 					workbox: {
 						globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}'],
