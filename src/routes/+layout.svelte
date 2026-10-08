@@ -92,7 +92,7 @@
 
 <SideBar />
 <div
-	class="fixed inset-0 bottom-36 left-0 overflow-x-hidden overflow-y-auto md:bottom-30 md:left-23"
+	class="fixed inset-0 bottom-36 left-0 overflow-x-hidden overflow-y-auto overscroll-y-contain md:bottom-30 md:left-23"
 >
 	<div>
 		{@render children()}
