@@ -10,7 +10,8 @@
 	import { onMount } from 'svelte';
 	import { Snackbar } from 'm3-svelte';
 	import { initTheme } from '$lib/theme/theme';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { socketManager } from '$lib/socketManager';
 	import { io } from 'socket.io-client';
@@ -23,6 +24,41 @@
 	import LibraryImportSheet from '$lib/components/LibraryImportSheet.svelte';
 
 	let { children, data } = $props();
+	let initialNavigation = true;
+
+	function rememberAppRoute(url: URL, storage: Storage, initial: boolean): string | null {
+		const routeKey = 'app.lastRoute';
+		const transientPaths = ['/onboard', '/login', '/register'];
+		if (initial && url.pathname === '/' && !url.search && !url.hash) {
+			const saved = storage.getItem(routeKey);
+			if (saved?.startsWith('/')) {
+				try {
+					const target = new URL(saved, url);
+					if (target.origin === url.origin && !transientPaths.includes(target.pathname)) {
+						const path = target.pathname + target.search + target.hash;
+						if (path !== '/') return path;
+					}
+				} catch {}
+			}
+		}
+		if (!transientPaths.includes(url.pathname)) {
+			storage.setItem(routeKey, url.pathname + url.search + url.hash);
+		}
+		return null;
+	}
+
+	afterNavigate(() => {
+		const initial = initialNavigation;
+		initialNavigation = false;
+		if (!window.matchMedia('(display-mode: standalone)').matches) return;
+		try {
+			if (!localStorage.getItem('hasOnboarded')) return;
+			const resumePath = rememberAppRoute($page.url, localStorage, initial);
+			if (resumePath) {
+				void goto(resolve(...([resumePath] as Parameters<typeof resolve>)), { replaceState: true });
+			}
+		} catch {}
+	});
 
 	onMount(async () => {
 		initTheme();

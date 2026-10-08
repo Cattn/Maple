@@ -100,6 +100,22 @@ let endedHandler: ((this: HTMLAudioElement, ev: Event) => void) | null = null;
 let durationChangeHandler: ((this: HTMLAudioElement, ev: Event) => void) | null = null;
 let listenersBoundTo: HTMLAudioElement | null = null;
 
+export function syncAudioState(audio: HTMLAudioElement) {
+	if (get(audioPlayer).audio !== audio) return;
+	const playing = !audio.paused && !audio.ended && !audio.error;
+	audioPlayer.update((state) => ({ ...state, playing, currentTime: audio.currentTime }));
+	curTime.set(audio.currentTime);
+	setCurTime.set(audio.currentTime);
+	if ('mediaSession' in navigator) {
+		navigator.mediaSession.playbackState = audio.src ? (playing ? 'playing' : 'paused') : 'none';
+	}
+}
+
+const playbackEvents = ['play', 'pause', 'ended', 'error'];
+const playbackStateHandler = () => {
+	if (listenersBoundTo) syncAudioState(listenersBoundTo);
+};
+
 export const currentDuration = derived(audioPlayer, ($audioPlayer) => {
 	return $audioPlayer.audio?.duration ?? 0;
 });
@@ -112,6 +128,9 @@ function bindAudioListeners(audio: HTMLAudioElement) {
 	if (listenersBoundTo === audio) return;
 
 	if (listenersBoundTo) {
+		for (const event of playbackEvents) {
+			listenersBoundTo.removeEventListener(event, playbackStateHandler);
+		}
 		if (endedHandler) {
 			listenersBoundTo.removeEventListener('ended', endedHandler);
 			endedHandler = null;
@@ -124,6 +143,9 @@ function bindAudioListeners(audio: HTMLAudioElement) {
 	}
 
 	listenersBoundTo = audio;
+	for (const event of playbackEvents) {
+		audio.addEventListener(event, playbackStateHandler);
+	}
 
 	endedHandler = () => {
 		get(audioPlayer).onEnded();
@@ -174,6 +196,13 @@ audioPlayer.subscribe((value) => {
 
 	bindAudioListeners(value.audio);
 });
+
+if (browser) {
+	document.addEventListener('visibilitychange', () => {
+		const audio = get(audioPlayer).audio;
+		if (document.visibilityState === 'visible' && audio) syncAudioState(audio);
+	});
+}
 function createTitle() {
 	const { subscribe, set } = writable('');
 

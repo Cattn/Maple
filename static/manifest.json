@@ -5,6 +5,7 @@
 	"display": "standalone",
 	"display_override": ["standalone", "minimal-ui"],
 	"start_url": "/",
+	"launch_handler": { "client_mode": "focus-existing" },
 	"orientation": "portrait",
 	"icons": [
 		{

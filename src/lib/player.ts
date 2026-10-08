@@ -14,7 +14,8 @@ import {
 	socket,
 	loopEnabled,
 	shuffleEnabled,
-	originalQueue
+	originalQueue,
+	syncAudioState
 } from '$lib/store';
 import { statsManager } from '$lib/stats';
 import type { QueueSnapshot } from '$lib/store';
@@ -24,6 +25,12 @@ import { SERVER } from '$lib/api/server';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
+let playbackRequest = 0;
+let preparedAudio: {
+	key: string;
+	blob?: Blob;
+	loading: Promise<Blob | undefined>;
+} | null = null;
 
 const AUDIO_MIME: Record<string, string> = {
 	mp3: 'audio/mpeg',
@@ -52,60 +59,79 @@ function revokeCurrentAudioUrl() {
 	currentAudioUrl = null;
 }
 
+function setMediaAction(action: MediaSessionAction, handler: MediaSessionActionHandler) {
+	try {
+		navigator.mediaSession.setActionHandler(action, handler);
+	} catch (error) {
+		if (!(error instanceof DOMException) || error.name !== 'NotSupportedError') throw error;
+	}
+}
+
+function playAudio(audio: HTMLAudioElement) {
+	void audio.play().catch((error) => {
+		syncAudioState(audio);
+		if (error.name !== 'AbortError') console.error('Unable to play audio:', error);
+	});
+}
+
 function initMediaSession() {
 	if (!browser || mediaSessionInitialized || !('mediaSession' in navigator)) return;
 	mediaSessionInitialized = true;
 
-	navigator.mediaSession.setActionHandler('play', () => {
+	setMediaAction('play', () => {
 		const state = get(audioPlayer);
-		if (state.audio instanceof HTMLAudioElement && !state.playing) {
-			togglePlay();
+		if (state.audio instanceof HTMLAudioElement && state.audio.paused) {
+			statsManager.recordResume();
+			playAudio(state.audio);
 		}
 	});
 
-	navigator.mediaSession.setActionHandler('pause', () => {
+	setMediaAction('pause', () => {
 		const state = get(audioPlayer);
-		if (state.audio instanceof HTMLAudioElement && state.playing) {
-			togglePlay();
+		if (state.audio instanceof HTMLAudioElement && !state.audio.paused) {
+			statsManager.recordPause();
+			state.audio.pause();
 		}
 	});
 
-	navigator.mediaSession.setActionHandler('previoustrack', () => {
+	setMediaAction('previoustrack', () => {
 		previous();
 	});
 
-	navigator.mediaSession.setActionHandler('nexttrack', () => {
+	setMediaAction('nexttrack', () => {
 		next();
 	});
 
-	navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+	setMediaAction('seekbackward', (details) => {
 		const state = get(audioPlayer);
 		if (state.audio instanceof HTMLAudioElement) {
-			const skipTime = details.seekOffset || 10;
+			const skipTime = details.seekOffset ?? 15;
 			seekTo(Math.max(state.audio.currentTime - skipTime, 0));
 		}
 	});
 
-	navigator.mediaSession.setActionHandler('seekforward', (details) => {
+	setMediaAction('seekforward', (details) => {
 		const state = get(audioPlayer);
 		if (state.audio instanceof HTMLAudioElement) {
-			const skipTime = details.seekOffset || 10;
-			seekTo(Math.min(state.audio.currentTime + skipTime, state.audio.duration || 0));
+			const skipTime = details.seekOffset ?? 15;
+			if (Number.isFinite(state.audio.duration)) {
+				seekTo(Math.min(state.audio.currentTime + skipTime, state.audio.duration));
+			}
 		}
 	});
 
-	navigator.mediaSession.setActionHandler('seekto', (details) => {
+	setMediaAction('seekto', (details) => {
 		if (details.seekTime !== undefined) {
 			seekTo(details.seekTime);
 		}
 	});
 
-	navigator.mediaSession.setActionHandler('stop', () => {
+	setMediaAction('stop', () => {
 		const state = get(audioPlayer);
 		if (state.audio instanceof HTMLAudioElement) {
 			state.audio.pause();
-			state.audio.currentTime = 0;
-			audioPlayer.update((value) => ({ ...value, playing: false, currentTime: 0 }));
+			seekTo(0);
+			syncAudioState(state.audio);
 		}
 	});
 }
@@ -122,11 +148,6 @@ function updateMediaSessionMetadata(song: Song, artworkUrl?: string) {
 		album: song.album || 'Unknown Album',
 		artwork
 	});
-}
-
-function updateMediaSessionPlaybackState(playing: boolean) {
-	if (!browser || !('mediaSession' in navigator)) return;
-	navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
 }
 
 function updateMediaSessionPositionState(audio: HTMLAudioElement) {
@@ -247,11 +268,38 @@ async function emitNowPlaying(song: Song) {
 	};
 	s.emit('nowPlaying', { nowPlaying: payload });
 
-	const artworkUploaded = await uploadAlbumArt(song);
-	const artworkUrl = artworkUploaded ? `${SERVER}/public/get/albumArt/${user.id}/${crypto.randomUUID()}` : undefined;
-	updateMediaSessionMetadata(song, artworkUrl);
+	await uploadAlbumArt(song);
 
 	await sendWebhook(song);
+}
+
+function audioKey(song: Song) {
+	return `${song.id}.${song.ext}`;
+}
+
+async function loadAudioBlob(song: Song) {
+	const file = await OPFS.getSong(song);
+	return file?.slice(0, file.size, audioMimeType(song.ext));
+}
+
+function prepareNextAudio() {
+	const state = get(queueState);
+	if (!state.items.length) return;
+	if (state.currentIndex === state.items.length - 1 && !get(loopEnabled)) {
+		preparedAudio = null;
+		return;
+	}
+	const song = state.items[(state.currentIndex + 1) % state.items.length];
+	const prepared = {
+		key: audioKey(song),
+		blob: undefined as Blob | undefined,
+		loading: loadAudioBlob(song).catch((error) => {
+			console.error('Unable to prepare next track:', error);
+			return undefined;
+		})
+	};
+	preparedAudio = prepared;
+	void prepared.loading.then((blob) => { prepared.blob = blob; });
 }
 
 async function playAtIndex(index: number) {
@@ -260,14 +308,14 @@ async function playAtIndex(index: number) {
 	const length = state.items.length;
 	const normalized = ((index % length) + length) % length;
 	const song = state.items[normalized];
+	const request = ++playbackRequest;
+	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
+	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
+	if (!blob || request !== playbackRequest) return;
 	updateQueue(state.items, normalized, state.source);
 	activeSong.set(song);
 	statsManager.recordPlay(song, state.source);
 	recentlyPlayedManager.add(song);
-	const buffer = await OPFS.getSong(song);
-	if (!buffer) return;
-	const arrayBuffer = await buffer.arrayBuffer();
-	const blob = new Blob([arrayBuffer], { type: audioMimeType(song.ext) });
 	const audioUrl = URL.createObjectURL(blob);
 	curTime.set(0);
 	setCurTime.set(0);
@@ -278,16 +326,22 @@ async function playAtIndex(index: number) {
 			revokeCurrentAudioUrl();
 			currentAudioUrl = audioUrl;
 			audio.src = audioUrl;
-			audio.play();
+			playAudio(audio);
 			audio.addEventListener('loadedmetadata', () => {
 				updateMediaSessionPositionState(audio);
 			}, { once: true });
-			return { ...value, audio, playing: true, currentTime: 0, onEnded: next };
+			return { ...value, audio, playing: !audio.paused, currentTime: 0, onEnded: next };
 		}
 		return value;
 	});
-	updateMediaSessionPlaybackState(true);
-	await emitNowPlaying(song);
+	updateMediaSessionMetadata(song);
+	if (song.image && typeof song.image === 'string') {
+		void OPFS.getImageUrl(song.image).then((url) => {
+			if (request === playbackRequest) updateMediaSessionMetadata(song, url);
+		}).catch(() => {});
+	}
+	prepareNextAudio();
+	void emitNowPlaying(song).catch((error) => console.error('Unable to report playback:', error));
 }
 
 export async function startPlayback(
@@ -333,7 +387,6 @@ export async function next() {
 			}
 			return { ...value, playing: false };
 		});
-		updateMediaSessionPlaybackState(false);
 		return;
 	}
 	statsManager.recordSkip();
@@ -349,25 +402,15 @@ export async function previous() {
 
 export function togglePlay() {
 	const state = get(audioPlayer);
-	if (state.playing) {
+	if (!(state.audio instanceof HTMLAudioElement)) return;
+	if (!state.audio.paused) {
 		statsManager.recordPause();
+		state.audio.pause();
 	} else {
 		statsManager.recordResume();
+		playAudio(state.audio);
 	}
-	const newPlayingState = !state.playing;
-	audioPlayer.update((value) => {
-		if (value.audio instanceof HTMLAudioElement) {
-			if (value.playing) {
-				value.audio.pause();
-			} else {
-				value.audio.play();
-			}
-			updateMediaSessionPositionState(value.audio);
-			return { ...value, playing: newPlayingState, currentTime: value.audio.currentTime };
-		}
-		return value;
-	});
-	updateMediaSessionPlaybackState(newPlayingState);
+	updateMediaSessionPositionState(state.audio);
 } 
 
 export function setVolumeLevel(volume: number) {
@@ -419,8 +462,10 @@ export function toggleShuffle() {
 		const newIndex = original.findIndex((s) => s.id === currentSong.id);
 		updateQueue(original.slice(), newIndex >= 0 ? newIndex : 0, state.source);
 	}
+	prepareNextAudio();
 }
 
 export function toggleLoop() {
 	loopEnabled.update((v) => !v);
+	prepareNextAudio();
 }
