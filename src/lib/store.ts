@@ -12,6 +12,23 @@ export type QueueSource = 'none' | 'album' | 'playlist' | 'artist' | 'tracks' | 
 export const pendingRequests = writable([] as PendingRequest[]);
 export const friends = writable([] as AddedFriend[]);
 export const isLoggedIn = writable(false);
+export type AppInstallPromptEvent = Event & {
+	prompt(): Promise<void>;
+	userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+export const appInstallPrompt = writable<AppInstallPromptEvent | null>(null);
+export const appInstalled = writable(false);
+export const appUpdateReady = writable<ServiceWorkerRegistration | null>(null);
+if (browser) {
+	window.addEventListener('beforeinstallprompt', (event) => {
+		event.preventDefault();
+		appInstallPrompt.set(event as AppInstallPromptEvent);
+	});
+	window.addEventListener('appinstalled', () => {
+		appInstallPrompt.set(null);
+		appInstalled.set(true);
+	});
+}
 export const friendNowPlaying = writable({} as Record<string, unknown>);
 export const socket = writable(null as Socket | null);
 //export const UserPeer = writable(null as Peer | null);

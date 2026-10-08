@@ -20,8 +20,10 @@ export default defineConfig(({ mode }) => {
 			!isDevelopment &&
 				SvelteKitPWA({
 					registerType: 'prompt',
+					injectRegister: false,
 					manifest,
 					workbox: {
+						navigateFallback: null,
 						globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}'],
 						runtimeCaching: [
 							{

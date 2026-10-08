@@ -5,17 +5,17 @@
 	import BottomBar from '$lib/components/BottomBar.svelte';
 	import MobileNowPlaying from '$lib/components/MobileNowPlaying.svelte';
 	import MobileBottomNav from '$lib/components/MobileBottomNav.svelte';
-	import { isLoggedIn, title, loadPreferencesStore, SavedUser, socket, UserInfo } from '$lib/store';
+	import { isLoggedIn, title, loadPreferencesStore, SavedUser, socket, UserInfo, appUpdateReady } from '$lib/store';
 	import { UserManager } from '$lib/api/UserManager';
 	import { onMount } from 'svelte';
 	import { Snackbar } from 'm3-svelte';
 	import { initTheme } from '$lib/theme/theme';
 	import { afterNavigate, goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
+	import { base, resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { socketManager } from '$lib/socketManager';
 	import { io } from 'socket.io-client';
-	import { browser } from '$app/environment';
+	import { browser, dev } from '$app/environment';
 	import UserSettings from '$lib/preferences/usersettings';
 	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
 	import { SERVER } from '$lib/api/server';
@@ -29,28 +29,32 @@
 	function rememberAppRoute(url: URL, storage: Storage, initial: boolean): string | null {
 		const routeKey = 'app.lastRoute';
 		const transientPaths = ['/onboard', '/login', '/register'];
-		if (initial && url.pathname === '/' && !url.search && !url.hash) {
+		const current = new URL(url);
+		const appLaunch = current.searchParams.get('launch') === 'pwa';
+		if (appLaunch) current.searchParams.delete('launch');
+		const currentPath = current.pathname + current.search + current.hash;
+		if (initial && ['/', '/settings'].includes(current.pathname) && !current.search && !current.hash) {
 			const saved = storage.getItem(routeKey);
 			if (saved?.startsWith('/')) {
 				try {
 					const target = new URL(saved, url);
 					if (target.origin === url.origin && !transientPaths.includes(target.pathname)) {
 						const path = target.pathname + target.search + target.hash;
-						if (path !== '/') return path;
+						if (path !== currentPath) return path;
 					}
 				} catch {}
 			}
 		}
-		if (!transientPaths.includes(url.pathname)) {
-			storage.setItem(routeKey, url.pathname + url.search + url.hash);
+		if (!transientPaths.includes(current.pathname)) {
+			storage.setItem(routeKey, currentPath);
 		}
-		return null;
+		return appLaunch ? currentPath : null;
 	}
 
 	afterNavigate(() => {
 		const initial = initialNavigation;
 		initialNavigation = false;
-		if (!window.matchMedia('(display-mode: standalone)').matches) return;
+		if (!window.matchMedia('(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)').matches) return;
 		try {
 			if (!localStorage.getItem('hasOnboarded')) return;
 			const resumePath = rememberAppRoute($page.url, localStorage, initial);
@@ -61,6 +65,24 @@
 	});
 
 	onMount(async () => {
+		if (!dev && 'serviceWorker' in navigator) {
+			void navigator.serviceWorker.register(`${base}/sw.js`, {
+				scope: `${base}/`,
+				updateViaCache: 'none'
+			}).then((registration) => {
+				const checkUpdate = () => {
+					if (registration.waiting && navigator.serviceWorker.controller) {
+						appUpdateReady.set(registration);
+					} else {
+						appUpdateReady.set(null);
+					}
+				};
+				checkUpdate();
+				registration.addEventListener('updatefound', () => {
+					registration.installing?.addEventListener('statechange', checkUpdate);
+				});
+			}).catch((error) => console.error('Unable to register the app service worker:', error));
+		}
 		initTheme();
 		loadPreferencesStore.load();
 

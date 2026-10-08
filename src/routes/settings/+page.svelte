@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Card, Button, Dialog } from 'm3-svelte';
 	import ColorPicker from 'svelte-awesome-color-picker';
-	import { isLoggedIn, UserInfo, SavedUser, socket } from '$lib/store';
+	import { isLoggedIn, UserInfo, SavedUser, socket, appInstallPrompt, appInstalled, appUpdateReady } from '$lib/store';
+	import { version, dev } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { title } from '$lib/store';
@@ -19,6 +20,38 @@
 
 	let name = $state('');
 	let initialName = $state('');
+	let appWindow = $state(false);
+	let installingApp = $state(false);
+	let reloadingApp = $state(false);
+	let installMessage = $state('');
+
+	async function installApp() {
+		const prompt = $appInstallPrompt;
+		if (!prompt || installingApp) return;
+		installingApp = true;
+		installMessage = '';
+		appInstallPrompt.set(null);
+		try {
+			await prompt.prompt();
+			const choice = await prompt.userChoice;
+			if (choice.outcome === 'accepted') {
+				installMessage = 'Installation requested. Your browser will confirm when it is complete.';
+			}
+		} catch (error) {
+			installMessage = 'Installation could not start. Try your browser’s Install app menu.';
+			console.error('Unable to prompt for app installation:', error);
+		} finally {
+			installingApp = false;
+		}
+	}
+
+	function reloadApp() {
+		const registration = $appUpdateReady;
+		if (!registration?.waiting || reloadingApp) return;
+		reloadingApp = true;
+		navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+		registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+	}
 	const webhookSettings = new Settings('webhook');
 	const initialWebhookEnabledValue =
 		webhookSettings.get('enabled') !== null ? webhookSettings.get('enabled') : false;
@@ -231,6 +264,7 @@
 	};
 
 	onMount(async () => {
+		appWindow = window.matchMedia('(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)').matches;
 		title.set('Settings');
 		await refreshTrackCount();
 	});
@@ -511,6 +545,24 @@
 					</div>
 				</div>
 
+				<Card variant="outlined" class="flex flex-col gap-3 p-6">
+					<p class="text-on-surface text-lg font-semibold">Maple app</p>
+					{#if appWindow || $appInstalled}
+						<p class="text-on-surface-variant text-sm">Maple is installed on this device.</p>
+					{:else if $appInstallPrompt}
+						<p class="text-on-surface-variant text-sm">Install Maple to open your library directly from your home screen.</p>
+						<Button variant="filled" onclick={installApp} disabled={installingApp}>Install Maple</Button>
+					{:else}
+						<p class="text-on-surface-variant text-sm">If your browser offers installation, use its Install app or Add to home screen menu.</p>
+					{/if}
+					{#if installMessage && !$appInstalled}
+						<p class="text-on-surface-variant text-sm" role="status">{installMessage}</p>
+					{/if}
+					{#if $appUpdateReady}
+						<Button variant="outlined" onclick={reloadApp} disabled={reloadingApp}>Reload to update</Button>
+					{/if}
+					<p class="text-on-surface-variant text-xs">Build {dev ? 'development' : version}</p>
+				</Card>
 				<Card variant="outlined" class="flex flex-col gap-6 p-6">
 					<div class="flex flex-col gap-5">
 						<div

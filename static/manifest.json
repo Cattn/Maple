@@ -4,7 +4,7 @@
 	"description": "Maple is a music library and organization tool.",
 	"display": "standalone",
 	"display_override": ["standalone", "minimal-ui"],
-	"start_url": "/",
+	"start_url": "/?launch=pwa",
 	"launch_handler": { "client_mode": "focus-existing" },
 	"orientation": "portrait",
 	"icons": [
