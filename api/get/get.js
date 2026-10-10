@@ -42,6 +42,7 @@ router.get('/isAuthenticated/:id', (req, res) => {
 });
 
 router.get('/logout/:id', (req, res) => {
+	require('../iomanager/rpc').disconnectAccount(req.user.id);
 	res.clearCookie('token');
 	return res.status(200).json({ message: 'Logout successful' });
 });

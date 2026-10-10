@@ -73,16 +73,20 @@ module.exports = {
 		}
 	},
 
-	discordRPC: async function (user, _friends, io, nowPlaying) {
+	discordRPC: function (user, _friends, io, nowPlaying, target) {
 		try {
-			const rpcData = {
+			const rpcData = nowPlaying.playing === false ? { playing: false } : {
 				artist: nowPlaying.artist || undefined,
 				title: nowPlaying.title || undefined,
 				state: nowPlaying.artist ? `by ${nowPlaying.artist}` : undefined,
 				largeImageKey: nowPlaying.image ? `data:image/jpeg;base64,${nowPlaying.image}` : "maple",
 				largeImageText: nowPlaying.album || undefined,
-				id: nowPlaying.id || undefined,
+				id: user,
 				album: nowPlaying.album || undefined,
+				playing: true,
+				position: nowPlaying.position,
+				duration: nowPlaying.duration,
+				playbackRate: nowPlaying.playbackRate ?? 1,
 				smallImageKey: "play",
 				smallText: "Listening to Maple",
 				buttons: [
@@ -93,7 +97,7 @@ module.exports = {
 				]
 			};
 
-			const clients = await this.getSocket(io, user);
+			const clients = target ? [target] : [...io.sockets.sockets.values()].filter(client => client.user.id === user);
 			if (clients.length > 0) {
 				console.log(`[IO] Found ${clients.length} sockets for user ${user}, emitting discordRPC`);
 				clients.forEach(client => {

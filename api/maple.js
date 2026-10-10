@@ -177,15 +177,18 @@ try {
 	console.log('[10] Socket authentication setup complete');
 
 	console.log('[11] Setting up socket event handlers...');
+	const rpc = require('./iomanager/rpc').create(io);
 	io.on('connection', (client) => {
 		console.log('[SOCKET] User connected: ' + client.user.id);
+		rpc.connect(client);
 
 		client.on('nowPlaying', async (data) => {
 			const id = client.user.id;
-			console.log(`[SOCKET] Received nowPlaying from user ${id} (socket ID: ${client.id}):`, data.nowPlaying);
+			console.log(`[SOCKET] Received nowPlaying from user ${id} (socket ID: ${client.id}):`, data?.nowPlaying);
 			console.log(`[SOCKET] Full message received:`, data);
 
-			const validation = validateNowPlaying(data.nowPlaying);
+			const nowPlaying = data?.nowPlaying && { ...data.nowPlaying, id };
+			const validation = validateNowPlaying(nowPlaying);
 
 
 			const sql = 'SELECT * FROM friends_db WHERE user_id = ? OR friend_id = ?';
@@ -199,6 +202,10 @@ try {
 						console.warn('[SOCKET] Semi-valid nowPlaying data received for user ' + id + ': ' + validation.message.join(', '));
 						client.emit('semiValidNowPlaying', { message: validation.message });
 					}
+					if (nowPlaying.discord === true) {
+						console.log(`[SOCKET] Emitting Discord RPC for user ${id}`);
+					}
+					rpc.update(client, { playing: true, position: 0, claim: true, ...nowPlaying });
 					const pool = require('./db');
 					const [allFriends] = await pool.promise().query(sql, [id, id]);
 					console.log(`[SOCKET] Found ${allFriends.length} friends for user ${id}:`, allFriends);
@@ -208,13 +215,9 @@ try {
 
 					if (allFriends !== null && allFriends.length > 0) {
 						console.log(`[SOCKET] Emitting nowPlaying to friends of user ${id}`);
-						ioTools.nowPlaying(id, sorted, io, data.nowPlaying);
+						ioTools.nowPlaying(id, sorted, io, nowPlaying);
 					} else {
 						console.log(`[SOCKET] No friends found for user ${id}`);
-					}
-					if (data.nowPlaying.discord === true) {
-						console.log(`[SOCKET] Emitting Discord RPC for user ${id}`);
-						ioTools.discordRPC(id, sorted, io, data.nowPlaying);
 					}
 				}
 			} catch (error) {
