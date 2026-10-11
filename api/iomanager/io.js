@@ -83,6 +83,8 @@ module.exports = {
 				largeImageText: nowPlaying.album || undefined,
 				id: user,
 				album: nowPlaying.album || undefined,
+				artworkId: nowPlaying.artworkId,
+				artworkWait: nowPlaying.artworkWait,
 				playing: true,
 				position: nowPlaying.position,
 				duration: nowPlaying.duration,

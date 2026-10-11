@@ -68,6 +68,8 @@ function create(io) {
 			artist: data.artist,
 			album: data.album,
 			image: typeof data.image === 'string' ? data.image : undefined,
+			artworkId: typeof data.artworkId === 'string' && /^[a-f0-9]{64}$/.test(data.artworkId) ? data.artworkId : undefined,
+			artworkWait: Number.isFinite(data.artworkWait) ? Math.max(0, Math.min(30, data.artworkWait)) : undefined,
 			id,
 			playing: true,
 			position: data.position,
@@ -96,7 +98,8 @@ function create(io) {
 				(producer.snapshot.duration !== undefined && position >= producer.snapshot.duration)) {
 				clear(id);
 			} else {
-				snapshot = { ...producer.snapshot, position };
+				snapshot = { ...producer.snapshot, position,
+					artworkWait: producer.snapshot.artworkWait === undefined ? undefined : Math.max(0, producer.snapshot.artworkWait - elapsed) };
 			}
 		}
 		sendOwnership(client);

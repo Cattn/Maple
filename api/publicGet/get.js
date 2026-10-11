@@ -2,6 +2,7 @@
 const express = require('express'),
 cookieParser = require('cookie-parser');
 const pool = require('../db');
+const { createHash } = require('node:crypto');
 
 const router = express.Router();
 
@@ -95,6 +96,16 @@ router.get('/albumArt/:id/:random', (req, res) => {
 		const user = results[0];
 		if (!user.albumArt) {
 			return res.status(404).json({ error: 'User has no album art' });
+		}
+
+		// RPC URLs identify exact bytes. Never serve a later/earlier track's cover
+		// under another track's ID; legacy random cache-busters remain supported.
+		if (/^[a-f0-9]{64}$/.test(req.params.random)) {
+			const artworkId = createHash('sha256').update(user.albumArt).digest('hex');
+			if (artworkId !== req.params.random) {
+				res.set('Cache-Control', 'no-store');
+				return res.status(404).json({ error: 'Requested album art is no longer current' });
+			}
 		}
 
 		res.set('Content-Type', 'image/jpeg');

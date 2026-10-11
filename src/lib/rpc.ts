@@ -5,13 +5,51 @@ import { activeSong, audioPlayer, isLoggedIn, SavedUser, socket } from '$lib/sto
 import UserSettings from '$lib/preferences/usersettings';
 
 let ownershipGeneration: string | undefined;
+let artworkRequest = 0;
+let artwork: { songId: string; account: string; deadline: number; id?: string } | undefined;
+let artworkTimer: ReturnType<typeof setTimeout> | undefined;
+let uploadQueue: Promise<void> = Promise.resolve();
+let publishArtwork = () => {};
+
+// Begin synchronously, before changing activeSong/audio: no event can announce the
+// next track with the previous cover. Serialize writes to Maple's per-user image.
+export function prepareRpcArtwork(songId: string, upload: () => Promise<string | undefined>): Promise<void> {
+	const request = ++artworkRequest;
+	const account = get(SavedUser).id;
+	clearTimeout(artworkTimer);
+	const pending = { songId, account, deadline: Date.now() + 30000, id: undefined as string | undefined };
+	artwork = pending;
+	publishArtwork();
+	const current = () => request === artworkRequest && account === get(SavedUser).id &&
+		get(isLoggedIn) && get(activeSong).id === songId;
+	artworkTimer = setTimeout(() => { if (current()) publishArtwork(); }, 30000);
+	uploadQueue = uploadQueue.then(async () => {
+		if (!current()) return;
+		try {
+			const id = await upload();
+			if (current() && typeof id === 'string' && /^[a-f0-9]{64}$/.test(id)) {
+				pending.id = id;
+				clearTimeout(artworkTimer);
+				publishArtwork();
+			}
+		} catch (error) {
+			console.error('Unable to upload RPC artwork:', error);
+		}
+	});
+	return uploadQueue;
+}
 
 export function playbackSnapshot() {
 	const audio = get(audioPlayer).audio;
 	const song = get(activeSong);
-	const playing = !!audio?.src && !audio.paused && !audio.ended && !audio.error && !!song.id;
+	const cover = artwork && artwork.songId === song.id && artwork.account === get(SavedUser).id ? artwork : undefined;
+	const artworkWait = cover ? Math.max(0, (cover.deadline - Date.now()) / 1000) : 30;
+	const playing = !!audio?.src && !audio.paused && !audio.ended && !audio.error && !!song.id &&
+		!!cover && (!!cover.id || artworkWait === 0);
 	return {
 		generation: ownershipGeneration,
+		artworkId: cover?.id,
+		artworkWait,
 		title: song.title,
 		artist: song.artist,
 		album: song.album,
@@ -63,6 +101,7 @@ if (browser) {
 		if (event.type === 'timeupdate' && Date.now() - lastReport < 15000) return;
 		publish(['playing', 'seeked', 'ratechange'].includes(event.type));
 	};
+	publishArtwork = () => publish(true);
 	const resetOwnership = () => {
 		stopTimer();
 		ownershipGeneration = undefined;
@@ -90,6 +129,8 @@ if (browser) {
 	const onSettings = () => publish(true);
 	const onVisibility = () => publish();
 	const onUnload = () => {
+		++artworkRequest;
+		clearTimeout(artworkTimer);
 		stopTimer();
 		if (boundSocket?.connected) {
 			boundSocket.emit('playbackState', { playing: false, discord: UserSettings.discord.enabled, generation: ownershipGeneration });
@@ -123,6 +164,7 @@ if (browser) {
 			if (value?.connected) onConnect();
 		}),
 		SavedUser.subscribe(({ id }) => {
+			if (account !== id) { ++artworkRequest; artwork = undefined; clearTimeout(artworkTimer); }
 			if (account && account !== id && boundSocket) {
 				onUnload();
 				boundSocket.disconnect();
@@ -135,6 +177,9 @@ if (browser) {
 				if (UserSettings.preferences.socket) boundSocket?.connect();
 				publish(true);
 			} else {
+				++artworkRequest;
+				artwork = undefined;
+				clearTimeout(artworkTimer);
 				onUnload();
 				boundSocket?.disconnect();
 			}
@@ -144,6 +189,8 @@ if (browser) {
 	window.addEventListener('pagehide', onUnload);
 	document.addEventListener('visibilitychange', onVisibility);
 	import.meta.hot?.dispose(() => {
+		++artworkRequest;
+		publishArtwork = () => {};
 		onUnload();
 		for (const unsubscribe of subscriptions) unsubscribe();
 		for (const event of events) boundAudio?.removeEventListener(event, onPlayback);

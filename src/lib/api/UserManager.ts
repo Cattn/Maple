@@ -301,7 +301,7 @@ export class UserManager {
 		}
 	};
 
-	public static setAlbumArt = async (file: File) => {
+	public static setAlbumArt = async (file: File): Promise<{ success: true; artworkId: string } | { success?: false; artworkId?: undefined; error: string }> => {
 		try {
 			const userId = get(UserInfo)?.id;
 			if (!userId) return { error: 'Not logged in' };
@@ -312,11 +312,16 @@ export class UserManager {
 			const response = await fetch(`${SERVER}/user/manage/setAlbumArt/${userId}`, {
 				credentials: 'include',
 				method: 'POST',
+				signal: AbortSignal.timeout(15000),
 				body: formData
 			});
 
 			if (response.ok) {
-				return { success: true };
+				const data = await response.json();
+				if (typeof data.artworkId === 'string' && /^[a-f0-9]{64}$/.test(data.artworkId)) {
+					return { success: true, artworkId: data.artworkId };
+				}
+				return { error: 'The server did not confirm RPC artwork' };
 			}
 			const data = await response.json();
 			return { error: data.error || 'Failed to update album art' };

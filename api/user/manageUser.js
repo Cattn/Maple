@@ -5,6 +5,7 @@ const pool = require('../db');
 const authenticateToken = require('../middleware/authToken');
 const verifyUser = require('../middleware/verifyUser');
 const multer = require('multer');
+const { createHash } = require('node:crypto');
 
 const router = express.Router();
 
@@ -63,7 +64,7 @@ router.post('/setProfile/:id', upload.single('pfp'), (req, res) => {
 router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 	const id = req.params.id;
 
-	if (!req.file || !req.file.buffer) {
+	if (!req.file || !req.file.buffer?.length) {
 		return res.status(400).json({ error: 'No file uploaded or invalid file.' });
 	}
 
@@ -89,7 +90,8 @@ router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 				console.error(updateError);
 				return res.status(500).json({ error: 'Error updating album art' });
 			}
-			return res.status(200).json({ message: 'Album art updated successfully' });
+			const artworkId = createHash('sha256').update(imageBuffer).digest('hex');
+			return res.status(200).json({ message: 'Album art updated successfully', artworkId });
 		});
 	});
 });

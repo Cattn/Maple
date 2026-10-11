@@ -22,7 +22,7 @@ import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
 import { UserManager } from './api/UserManager';
 import { SERVER } from '$lib/api/server';
-import { playbackSnapshot } from '$lib/rpc';
+import { playbackSnapshot, prepareRpcArtwork } from '$lib/rpc';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
@@ -177,25 +177,27 @@ function updateQueue(items: Song[], index: number, source?: QueueSourceState) {
 
 async function getImageFile(imagePath: string): Promise<File> {
 	const response = await OPFS.get().image(imagePath);
+	if (!response.ok) throw new Error('Unable to read album artwork');
 	const arrayBuffer = await response.arrayBuffer();
 	return new File([arrayBuffer], imagePath, { type: 'image/jpeg' });
 }
 
-async function uploadAlbumArt(song: Song): Promise<boolean> {
+async function uploadAlbumArt(song: Song): Promise<string | undefined> {
 	const isLoggedIn = await UserManager.isLoggedIn();
-	if (!isLoggedIn) return false;
+	if (!isLoggedIn) return;
 
-	if (!song.image || typeof song.image !== 'string') return false;
+	if (!song.image) return;
 
 	try {
-		const image = await getImageFile(song.image);
+		const image = typeof song.image === 'string' ? await getImageFile(song.image) : song.image;
+		if (!image.size) return;
 		const imageBuffer = await image.arrayBuffer();
 		const imageFile = new File([imageBuffer], 'album.jpg', { type: 'image/jpeg' });
-		await UserManager.setAlbumArt(imageFile);
-		return true;
+		const result = await UserManager.setAlbumArt(imageFile);
+		return result.success === true ? result.artworkId : undefined;
 	} catch (error) {
 		console.error('Error uploading album art:', error);
-		return false;
+		return;
 	}
 }
 
@@ -253,7 +255,10 @@ async function sendWebhook(song: Song) {
 	}
 }
 
-async function emitNowPlaying(song: Song) {
+async function emitNowPlaying(song: Song, request: number, artworkReady: Promise<void>) {
+	const account = get(SavedUser).id;
+	await artworkReady;
+	if (request !== playbackRequest || account !== get(SavedUser).id) return;
 	const s = get(socket);
 	const user = get(SavedUser);
 	if (!s || !user?.id) return;
@@ -269,8 +274,6 @@ async function emitNowPlaying(song: Song) {
 		source: 'Web'
 	};
 	s.emit('nowPlaying', { nowPlaying: payload });
-
-	await uploadAlbumArt(song);
 
 	await sendWebhook(song);
 }
@@ -314,6 +317,7 @@ async function playAtIndex(index: number) {
 	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
 	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
 	if (!blob || request !== playbackRequest) return;
+	const artworkReady = prepareRpcArtwork(song.id, () => uploadAlbumArt(song));
 	updateQueue(state.items, normalized, state.source);
 	activeSong.set(song);
 	statsManager.recordPlay(song, state.source);
@@ -343,7 +347,7 @@ async function playAtIndex(index: number) {
 		}).catch(() => {});
 	}
 	prepareNextAudio();
-	void emitNowPlaying(song).catch((error) => console.error('Unable to report playback:', error));
+	void emitNowPlaying(song, request, artworkReady).catch((error) => console.error('Unable to report playback:', error));
 }
 
 export async function startPlayback(
