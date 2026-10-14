@@ -156,13 +156,22 @@ try {
 	console.log('[10] Socket authentication setup complete');
 
 	console.log('[11] Setting up socket event handlers...');
+	const rpc = require('./iomanager/rpc').create(io);
 	io.on('connection', (client) => {
 		console.log('[SOCKET] User connected: ' + client.user.id);
+		rpc.connect(client);
 
 		client.on('nowPlaying', async (data) => {
 			const id = client.user.id;
-			console.log(`[SOCKET] Received nowPlaying from user ${id} (socket ID: ${client.id}):`, data.nowPlaying);
+			console.log(`[SOCKET] Received nowPlaying from user ${id} (socket ID: ${client.id}):`, data?.nowPlaying);
 			console.log(`[SOCKET] Full message received:`, data);
+			const nowPlaying = data?.nowPlaying && { ...data.nowPlaying, id };
+			if (!nowPlaying || typeof nowPlaying.discord !== 'boolean' ||
+				['title', 'artist', 'album'].some(key => typeof nowPlaying[key] !== 'string')) return;
+			if (nowPlaying.discord === true) {
+				console.log(`[SOCKET] Emitting Discord RPC for user ${id}`);
+			}
+			rpc.update(client, { playing: true, position: 0, claim: true, ...nowPlaying });
 			
 			const sql = 'SELECT * FROM friends_db WHERE user_id = ? OR friend_id = ?';
 
@@ -176,13 +185,9 @@ try {
 
 				if (allFriends !== null && allFriends.length > 0) {
 					console.log(`[SOCKET] Emitting nowPlaying to friends of user ${id}`);
-					ioTools.nowPlaying(id, sorted, io, data.nowPlaying);
+					ioTools.nowPlaying(id, sorted, io, nowPlaying);
 				} else {
 					console.log(`[SOCKET] No friends found for user ${id}`);
-				}
-				if (data.nowPlaying.discord === true) {
-					console.log(`[SOCKET] Emitting Discord RPC for user ${id}`);
-					ioTools.discordRPC(id, sorted, io, data.nowPlaying);
 				}
 			} catch (error) {
 				console.error('[ERROR] Error in nowPlaying:', error);

@@ -22,6 +22,7 @@ import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
 import { UserManager } from './api/UserManager';
 import { SERVER } from '$lib/api/server';
+import { playbackSnapshot } from '$lib/rpc';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
@@ -258,6 +259,7 @@ async function emitNowPlaying(song: Song) {
 	if (!s || !user?.id) return;
 	const formatted = new Date().toISOString().slice(0, 19).replace('T', ' ');
 	const payload = {
+		...playbackSnapshot(),
 		title: song.title,
 		artist: song.artist,
 		album: song.album,

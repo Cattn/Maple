@@ -97,6 +97,13 @@ router.post('/', (req, res) => {
 				return res.status(401).json({ error: 'Invalid credentials' });
 			}
 
+			if (req.cookies.token) {
+				jwt.verify(req.cookies.token, process.env.TOKEN_SECRET, (error, previousUser) => {
+					if (!error && previousUser.id !== user.id) {
+						require('../iomanager/rpc').disconnectAccount(previousUser.id);
+					}
+				});
+			}
 			const token = generateToken({ id: user.id });
 			res.cookie('token', token, {
 				httpOnly: true,

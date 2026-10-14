@@ -1,4 +1,5 @@
 import { Settings } from './fetch';
+import { browser } from '$app/environment';
 let webhookEnabled = false;
 let webhookURL = '';
 
@@ -53,7 +54,13 @@ const UserSettings = {
 		isDarkMode
 	},
 	discord: {
-		enabled: discord
+		get enabled(): boolean {
+			return discord;
+		},
+		set enabled(value: boolean) {
+			discord = value;
+			if (browser) window.dispatchEvent(new Event('discordSettingsChanged'));
+		}
 	}
 };
 
