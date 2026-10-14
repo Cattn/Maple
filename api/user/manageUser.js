@@ -89,6 +89,8 @@ router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 				console.error(updateError);
 				return res.status(500).json({ error: 'Error updating album art' });
 			}
+			// Notify RPC listeners only after the cover has been committed to storage.
+			require('../iomanager/rpc').artworkUploaded(id, req.body?.artworkRequestId);
 			return res.status(200).json({ message: 'Album art updated successfully' });
 		});
 	});

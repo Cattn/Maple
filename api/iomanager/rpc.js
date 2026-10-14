@@ -63,11 +63,17 @@ function create(io) {
 		}
 		if (previous) clearTimeout(previous.timer);
 		client.rpcSuperseded = false;
+		const artworkRequestId = typeof data.artworkRequestId === 'string' && /^[\w-]{1,128}$/.test(data.artworkRequestId) ? data.artworkRequestId : undefined;
+		const sameArtwork = previous?.client === client && artworkRequestId && previous.snapshot.artworkRequestId === artworkRequestId;
 		const snapshot = {
 			title: data.title,
 			artist: data.artist,
 			album: data.album,
 			image: typeof data.image === 'string' ? data.image : undefined,
+			artworkRequestId,
+			artworkReady: sameArtwork && previous.snapshot.artworkReady === true ? true :
+				typeof data.artworkReady === 'boolean' ? data.artworkReady : undefined,
+			artworkWait: Number.isFinite(data.artworkWait) ? Math.max(0, Math.min(30, data.artworkWait)) : undefined,
 			id,
 			playing: true,
 			position: data.position,
@@ -96,7 +102,8 @@ function create(io) {
 				(producer.snapshot.duration !== undefined && position >= producer.snapshot.duration)) {
 				clear(id);
 			} else {
-				snapshot = { ...producer.snapshot, position };
+				snapshot = { ...producer.snapshot, position,
+					artworkWait: producer.snapshot.artworkWait === undefined ? undefined : Math.max(0, producer.snapshot.artworkWait - elapsed) };
 			}
 		}
 		sendOwnership(client);
@@ -117,8 +124,26 @@ function create(io) {
 		}
 	}
 
-	manager = { connect, update, disconnectAccount };
+	function artworkUploaded(id, requestId) {
+		const artworkRequestId = typeof requestId === 'string' && /^[\w-]{1,128}$/.test(requestId) ? requestId : undefined;
+		if (requestId !== undefined && !artworkRequestId) return;
+		const producer = producers.get(id);
+		// A late upload from another track/tab must not confirm the current track.
+		if (producer && producer.snapshot.artworkRequestId !== artworkRequestId) return;
+		if (producer) producer.snapshot.artworkReady = true;
+		for (const client of io.sockets.sockets.values()) {
+			if (client.connected && client.user.id === id) {
+				client.emit('albumArtUploaded', { id, artworkRequestId });
+			}
+		}
+	}
+
+	manager = { connect, update, disconnectAccount, artworkUploaded };
 	return manager;
 }
 
-module.exports = { create, disconnectAccount: id => manager?.disconnectAccount(id) };
+module.exports = {
+	create,
+	disconnectAccount: id => manager?.disconnectAccount(id),
+	artworkUploaded: (id, requestId) => manager?.artworkUploaded(id, requestId)
+};
