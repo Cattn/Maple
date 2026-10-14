@@ -22,7 +22,7 @@ import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
 import { UserManager } from './api/UserManager';
 import { SERVER } from '$lib/api/server';
-import { playbackSnapshot } from '$lib/rpc';
+import { playbackSnapshot, prepareRpcArtwork } from '$lib/rpc';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
@@ -177,22 +177,24 @@ function updateQueue(items: Song[], index: number, source?: QueueSourceState) {
 
 async function getImageFile(imagePath: string): Promise<File> {
 	const response = await OPFS.get().image(imagePath);
+	if (!response.ok) throw new Error('Unable to read album artwork');
 	const arrayBuffer = await response.arrayBuffer();
 	return new File([arrayBuffer], imagePath, { type: 'image/jpeg' });
 }
 
-async function uploadAlbumArt(song: Song): Promise<boolean> {
+async function uploadAlbumArt(song: Song, artworkRequestId: string): Promise<boolean> {
 	const isLoggedIn = await UserManager.isLoggedIn();
 	if (!isLoggedIn) return false;
 
-	if (!song.image || typeof song.image !== 'string') return false;
+	if (!song.image) return false;
 
 	try {
-		const image = await getImageFile(song.image);
+		const image = typeof song.image === 'string' ? await getImageFile(song.image) : song.image;
+		if (!image.size) return false;
 		const imageBuffer = await image.arrayBuffer();
 		const imageFile = new File([imageBuffer], 'album.jpg', { type: 'image/jpeg' });
-		await UserManager.setAlbumArt(imageFile);
-		return true;
+		const result = await UserManager.setAlbumArt(imageFile, artworkRequestId);
+		return result.success === true;
 	} catch (error) {
 		console.error('Error uploading album art:', error);
 		return false;
@@ -270,8 +272,6 @@ async function emitNowPlaying(song: Song) {
 	};
 	s.emit('nowPlaying', { nowPlaying: payload });
 
-	await uploadAlbumArt(song);
-
 	await sendWebhook(song);
 }
 
@@ -314,6 +314,7 @@ async function playAtIndex(index: number) {
 	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
 	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
 	if (!blob || request !== playbackRequest) return;
+	prepareRpcArtwork(song.id, artworkRequestId => uploadAlbumArt(song, artworkRequestId));
 	updateQueue(state.items, normalized, state.source);
 	activeSong.set(song);
 	statsManager.recordPlay(song, state.source);

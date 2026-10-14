@@ -301,17 +301,19 @@ export class UserManager {
 		}
 	};
 
-	public static setAlbumArt = async (file: File) => {
+	public static setAlbumArt = async (file: File, artworkRequestId?: string) => {
 		try {
 			const userId = get(UserInfo)?.id;
 			if (!userId) return { error: 'Not logged in' };
 
 			const formData = new FormData();
 			formData.append('albumArt', file);
+			if (artworkRequestId) formData.append('artworkRequestId', artworkRequestId);
 
 			const response = await fetch(`${SERVER}/user/manage/setAlbumArt/${userId}`, {
 				credentials: 'include',
 				method: 'POST',
+				signal: AbortSignal.timeout(15000),
 				body: formData
 			});
 
