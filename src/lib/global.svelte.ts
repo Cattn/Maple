@@ -2,6 +2,7 @@ import { OPFS } from './opfs';
 import type { Song, Playlist, Artist, Album } from './types';
 import { browser } from '$app/environment';
 import { toast } from 'svelte-sonner';
+import { recentlyPlayedManager } from './store';
 
 let tracksState: Song[] = $state([]);
 let playlistsState: Playlist[] = $state([]);
@@ -34,6 +35,7 @@ async function initialize() {
 					`Library data is missing (${expected} tracks). The browser may have cleared storage — please re-upload.`
 				);
 			}
+			recentlyPlayedManager.clear();
 			return;
 		} catch (error) {
 			console.error('Failed to initialize tracks and playlists:', error);
@@ -51,16 +53,40 @@ export async function refreshLibrary() {
 		albumsState = await OPFS.get().albums();
 		if (tracksState.length > 0) {
 			OPFS.rememberLibrarySize(tracksState.length);
+		} else {
+			recentlyPlayedManager.clear();
 		}
 	} catch (error) {
 		console.error('Failed to refresh library:', error);
 	}
 }
 
+async function checkLibraryStorage() {
+	if (document.visibilityState !== 'visible') return;
+	try {
+		recentlyPlayedManager.load();
+		if (await OPFS.libraryExists()) return;
+		tracksState = [];
+		playlistsState = [];
+		artistsState = [];
+		albumsState = [];
+		recentlyPlayedManager.clear();
+		OPFS.rememberLibrarySize(0);
+	} catch (error) {
+		console.error('Failed to check library storage:', error);
+	}
+}
+
 if (browser) {
-	initialize().catch((error) => {
-		console.error('Initialization failed:', error);
-	});
+	initialize()
+		.then(checkLibraryStorage)
+		.catch((error) => {
+			console.error('Initialization failed:', error);
+		});
+	window.addEventListener('storage', checkLibraryStorage);
+	window.addEventListener('focus', checkLibraryStorage);
+	document.addEventListener('visibilitychange', checkLibraryStorage);
+	window.setInterval(checkLibraryStorage, 5000);
 }
 
 export const tracks = () => tracksState;

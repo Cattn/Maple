@@ -146,12 +146,23 @@ export class OPFS {
 					.then(() => Promise.resolve())
 			)
 		);
-		this.tracksCache = null;
-		this.albumsCache = null;
-		this.artistsCache = null;
-		this.playlistsCache = null;
+		this.resetLibraryCache();
+		localStorage.removeItem('recentlyPlayed');
 		this.rememberLibrarySize(0);
 		toast('Library cleared');
+	}
+
+	private static resetLibraryCache() {
+		this.tracksCache = [];
+		this.albumsCache = [];
+		this.artistsCache = [];
+		this.playlistsCache = [];
+	}
+
+	public static async libraryExists() {
+		const exists = await file('/tracks/tracks.json').exists();
+		if (!exists) this.resetLibraryCache();
+		return exists;
 	}
 
 	public static async getImageUrl(path: string) {
