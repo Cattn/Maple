@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 const express = require('express'),
 	cookieParser = require('cookie-parser');
-const pool = require('../db');
+const db = require('../db');
 const authenticateToken = require('../middleware/authToken');
 const verifyUser = require('../middleware/verifyUser');
 
@@ -16,7 +16,7 @@ router.get('/user/:id', (req, res) => {
 	const id = req.user.id;
 	const sql = 'SELECT username, id, name, pfp FROM users WHERE id = ?';
 
-	pool.query(sql, [id], (error, results) => {
+	db.query(sql, [id], (error, results) => {
 		if (error) {
 			console.error('Error fetching user:', error);
 			return res.status(500).json({ error: 'Error fetching user' });

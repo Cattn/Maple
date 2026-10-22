@@ -176,8 +176,8 @@ try {
 			const sql = 'SELECT * FROM friends_db WHERE user_id = ? OR friend_id = ?';
 
 			try {
-				const pool = require('./db');
-				const [allFriends] = await pool.promise().query(sql, [id, id]);
+				const db = require('./db');
+				const allFriends = await db.query(sql, [id, id]);
 				console.log(`[SOCKET] Found ${allFriends.length} friends for user ${id}:`, allFriends);
 				
 				const sorted = sortFriends(allFriends, id);
