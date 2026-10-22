@@ -206,8 +206,8 @@ try {
 						console.log(`[SOCKET] Emitting Discord RPC for user ${id}`);
 					}
 					rpc.update(client, { playing: true, position: 0, claim: true, ...nowPlaying });
-					const pool = require('./db');
-					const [allFriends] = await pool.promise().query(sql, [id, id]);
+					const db = require('./db');
+					const allFriends = await db.query(sql, [id, id]);
 					console.log(`[SOCKET] Found ${allFriends.length} friends for user ${id}:`, allFriends);
 					
 					const sorted = sortFriends(allFriends, id);

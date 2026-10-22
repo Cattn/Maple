@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 const express = require('express'),
 	cookieParser = require('cookie-parser');
-const pool = require('../db');
+const db = require('../db');
 const authenticateToken = require('../middleware/authToken');
 const verifyUser = require('../middleware/verifyUser');
 const multer = require('multer');
@@ -40,7 +40,7 @@ router.post('/setProfile/:id', upload.single('pfp'), (req, res) => {
 	}
 
 	const getUserSql = 'SELECT username, id FROM users WHERE id = ?';
-	pool.query(getUserSql, [id], (error, results) => {
+	db.query(getUserSql, [id], (error, results) => {
 		if (error) {
 			console.error(error);
 			return res.status(500).json({ error: 'Error fetching user' });
@@ -50,7 +50,7 @@ router.post('/setProfile/:id', upload.single('pfp'), (req, res) => {
 		}
 
 		const updatePfpSql = 'UPDATE users SET pfp = ? WHERE id = ?';
-		pool.query(updatePfpSql, [imageBuffer, id], (updateError) => {
+		db.query(updatePfpSql, [imageBuffer, id], (updateError) => {
 			if (updateError) {
 				console.error(updateError);
 				return res.status(500).json({ error: 'Error updating profile picture' });
@@ -74,7 +74,7 @@ router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 	}
 
 	const getUserSql = 'SELECT username, id FROM users WHERE id = ?';
-	pool.query(getUserSql, [id], (error, results) => {
+	db.query(getUserSql, [id], (error, results) => {
 		if (error) {
 			console.error(error);
 			return res.status(500).json({ error: 'Error fetching user' });
@@ -83,8 +83,8 @@ router.post('/setAlbumArt/:id', upload.single('albumArt'), (req, res) => {
 			return res.status(404).json({ error: 'User not found' });
 		}
 
-		const updatePfpSql = 'INSERT INTO live_status (user_id, albumArt) VALUES (?, ?) ON DUPLICATE KEY UPDATE albumArt = VALUES(albumArt)';
-		pool.query(updatePfpSql, [id, imageBuffer], (updateError) => {
+		const updatePfpSql = 'INSERT INTO live_status (user_id, albumArt) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET albumArt = excluded.albumArt';
+		db.query(updatePfpSql, [id, imageBuffer], (updateError) => {
 			if (updateError) {
 				console.error(updateError);
 				return res.status(500).json({ error: 'Error updating album art' });
@@ -105,7 +105,7 @@ router.post('/setDisplayName/:id', (req, res) => {
 	}
 
 	const getUserSql = 'SELECT username, id FROM users WHERE id = ?';
-	pool.query(getUserSql, [id], (error, results) => {
+	db.query(getUserSql, [id], (error, results) => {
 		if (error) {
 			console.error(error);
 			return res.status(500).json({ error: 'Error fetching user' });
@@ -115,7 +115,7 @@ router.post('/setDisplayName/:id', (req, res) => {
 		}
 
 		const updateDisplayNameSql = 'UPDATE users SET name = ? WHERE id = ?';
-		pool.query(updateDisplayNameSql, [displayName, id], (updateError) => {
+		db.query(updateDisplayNameSql, [displayName, id], (updateError) => {
 			if (updateError) {
 				console.error(updateError);
 				return res.status(500).json({ error: 'Error updating display name' });
@@ -128,21 +128,17 @@ router.post('/setDisplayName/:id', (req, res) => {
 router.delete('/delete/:id', async (req, res) => {
 	const id = req.params.id;
 
-	const connection = await pool.promise().getConnection();
 	try {
-		await connection.beginTransaction();
-		await connection.query('DELETE FROM pending_requests WHERE user_id = ? OR friend_id = ?', [id, id]);
-		await connection.query('DELETE FROM friends_db WHERE user_id = ? OR friend_id = ?', [id, id]);
-		await connection.query('DELETE FROM live_status WHERE user_id = ?', [id]);
-		await connection.query('DELETE FROM users WHERE id = ?', [id]);
-		await connection.commit();
+		db.transaction((transaction) => {
+			transaction.run('DELETE FROM pending_requests WHERE user_id = ? OR friend_id = ?', [id, id]);
+			transaction.run('DELETE FROM friends_db WHERE user_id = ? OR friend_id = ?', [id, id]);
+			transaction.run('DELETE FROM live_status WHERE user_id = ?', [id]);
+			transaction.run('DELETE FROM users WHERE id = ?', [id]);
+		});
 		return res.status(200).json({ message: 'User data successfully deleted.' });
 	} catch (error) {
 		console.error(error);
-		await connection.rollback();
 		return res.status(500).json({ error: 'Error deleting user' });
-	} finally {
-		connection.release();
 	}
 });
 

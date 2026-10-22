@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-const pool = require('../db');
+const db = require('../db');
 
 module.exports = {
 	addFriend: async function (user, friend, socket, io) {
@@ -30,12 +30,12 @@ module.exports = {
 		}
 	},
 
-	nowPlaying: function (user, friends, io, nowPlaying) {
+	nowPlaying: async function (user, friends, io, nowPlaying) {
 		try {
 			console.log(`[IO] Processing nowPlaying for user ${user} with ${friends.length} friends`);
-			pool.promise().query(
+			await db.query(
 				'INSERT INTO live_status (user_id, playing) VALUES (?, ?) ' +
-				'ON DUPLICATE KEY UPDATE playing = VALUES(playing)',
+				'ON CONFLICT(user_id) DO UPDATE SET playing = excluded.playing',
 				[user, JSON.stringify(nowPlaying)]
 			);
 			friends.forEach(async (friend) => {

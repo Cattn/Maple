@@ -12,3 +12,10 @@ vite.config.ts.timestamp-*
 dev-dist/*
 .vercel
 /SMS
+# SQLite account databases, WAL files, and private database exports
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.sql
+!api/storage/schema.sql
