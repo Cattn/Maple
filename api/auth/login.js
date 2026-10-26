@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 const express = require('express'),
 cookieParser = require('cookie-parser');
-const pool = require('../db');
+const db = require('../db');
 const bcrypt = require('bcrypt');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -40,7 +40,7 @@ router.post('/create', (req, res) => {
 			.json({ error: 'Password is not strong enough', passwordStrength: isStrongPassword });
 	}
 
-	pool.query('SELECT username FROM users WHERE username= ?', [username], function (err, row) {
+	db.query('SELECT username FROM users WHERE username= ?', [username], function (err, row) {
 		if (err) {
 			console.error(err);
 			return res.status(500).json({ error: 'Error checking username' });
@@ -60,7 +60,7 @@ router.post('/create', (req, res) => {
 			const dateString = now.toISOString().slice(0, 19).replace('T', ' ');
 			console.log(dateString);
 			const sql = 'INSERT INTO users (id, username, password, creation_date, last_login) VALUES (?, ?, ?, ?, ?)';
-			pool.query(sql, [id, username, hash, dateString, dateString], (error, results) => {
+			db.query(sql, [id, username, hash, dateString, dateString], (error, results) => {
 				if (error) {
 					console.error(error);
 					return res.status(500).json({ error: 'Error creating user' });
@@ -76,7 +76,7 @@ router.post('/', (req, res) => {
 	const { username, password } = req.body;
 
 	const sql = 'SELECT * FROM users WHERE username = ?';
-	pool.query(sql, [username], (error, results) => {
+	db.query(sql, [username], (error, results) => {
 		if (error) {
 			console.error(error);
 			return res.status(500).json({ error: 'Error fetching user' });
@@ -114,7 +114,7 @@ router.post('/', (req, res) => {
 			const now = new Date();
 			const dateString = now.toISOString().slice(0, 19).replace('T', ' ');
 			const updateLastLoginSql = 'UPDATE users SET last_login = ? WHERE id = ?';
-			pool.query(updateLastLoginSql, [dateString, user.id], (error) => {
+			db.query(updateLastLoginSql, [dateString, user.id], (error) => {
 				if (error) {
 					console.error(error);
 				}
