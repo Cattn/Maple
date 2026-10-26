@@ -386,6 +386,47 @@ test('artwork links refresh during long playback without writing heartbeat data'
 	}
 });
 
+test('long tracks keep RPC fresh without artwork or repeated listening writes', async (context) => {
+	const owner = await connected(alice.client);
+	const friend = await connected(bob.client);
+	context.mock.timers.enable({ apis: ['Date'] });
+	try {
+		const started = next(friend, 'listening');
+		assert.deepEqual(
+			await owner.emitWithAck('playbackStart', {
+				...track('rpc-long', 'Long', true),
+				duration: null
+			}),
+			{ ok: true }
+		);
+		await started;
+		const played = stored().playing;
+		const quiet = silent(friend, 'listening');
+		for (let beat = 1; beat <= 13; beat++) {
+			context.mock.timers.setTime(Date.now() + 50000);
+			const fresh = next(owner, 'rpcUpdate');
+			assert.deepEqual(
+				await owner.emitWithAck('playbackUpdate', {
+					...update('rpc-long', beat * 50),
+					discord: true
+				}),
+				{ ok: true }
+			);
+			const rpc = await fresh;
+			assert.equal(field(rpc, 'playing'), true);
+			assert.equal(field(rpc, 'largeImageKey'), 'maple');
+			assert.equal(field(rpc, 'position'), beat * 50);
+		}
+		await quiet;
+		assert.equal(stored().playing, played);
+		assert.deepEqual(await owner.emitWithAck('playbackStop', { playbackId: 'rpc-long' }), {
+			ok: true
+		});
+	} finally {
+		context.mock.timers.reset();
+	}
+});
+
 test('an idle socket disconnects when its session expires', async () => {
 	const account = await verifiedAccount(harness, 'idle', 'idle@example.test');
 	harness.db.run('UPDATE auth_session SET "expiresAt" = ? WHERE "userId" = ?', [

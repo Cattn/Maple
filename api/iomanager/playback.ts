@@ -16,6 +16,7 @@ import type { ProfileManager } from '../user/profiles.js';
 import { accountRoom } from './io.js';
 
 const LEASE_MS = 90000;
+const RPC_HEARTBEAT_MS = 30000;
 const SEEK_SECONDS = 2;
 
 interface Playback extends CurrentPlayback {
@@ -23,6 +24,7 @@ interface Playback extends CurrentPlayback {
 	playbackId: string;
 	discord: boolean;
 	publishedArtworkURL: string | null;
+	lastRpcAt: number;
 	receivedAt: number;
 	lease: NodeJS.Timeout;
 }
@@ -58,6 +60,7 @@ export class PlaybackManager {
 			playbackId,
 			discord,
 			publishedArtworkURL: null,
+			lastRpcAt: 0,
 			playing,
 			position: clamp(position, track.duration),
 			playbackRate,
@@ -102,6 +105,12 @@ export class PlaybackManager {
 			playback.artwork &&
 			this.links.url(id, playback.artwork) !== playback.publishedArtworkURL;
 		if (changed || refreshArtwork) this.publish(id, discord);
+		else if (
+			playback.playing &&
+			playback.discord &&
+			Date.now() - playback.lastRpcAt >= RPC_HEARTBEAT_MS
+		)
+			this.publishRpc(id);
 		return true;
 	}
 
@@ -223,12 +232,17 @@ export class PlaybackManager {
 			account.emit('playbackOwnership', { playbackId: playback?.playbackId ?? null });
 		}
 		this.publishListening(id);
-		if (wasSharing || playback?.discord) {
-			const update = this.rpc(id);
-			account.emit('rpcUpdate', update);
-			if (playback)
-				playback.publishedArtworkURL =
-					update.playing && playback.artwork ? update.largeImageKey : null;
+		if (wasSharing || playback?.discord) this.publishRpc(id);
+	}
+
+	private publishRpc(id: string) {
+		const playback = this.playbacks.get(id);
+		const update = this.rpc(id);
+		this.io.to(accountRoom(id)).emit('rpcUpdate', update);
+		if (playback) {
+			playback.lastRpcAt = Date.now();
+			playback.publishedArtworkURL =
+				update.playing && playback.artwork ? update.largeImageKey : null;
 		}
 	}
 
