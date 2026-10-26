@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
 								options: {
 									cacheName: 'api-cache',
 									networkTimeoutSeconds: 10,
+									matchOptions: { ignoreSearch: true },
 									cacheableResponse: { statuses: [0, 200] }
 								}
 							}
