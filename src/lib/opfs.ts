@@ -106,7 +106,9 @@ export class OPFS {
 			paths.map((p) =>
 				dir(p)
 					.exists()
-					.then((exists) => (exists ? Promise.resolve() : dir(p).create()))
+					.then(async (exists) => {
+						if (!exists) await dir(p).create();
+					})
 			)
 		);
 

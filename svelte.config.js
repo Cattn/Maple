@@ -29,7 +29,11 @@ const config = {
 				include: ['/*'],
 				exclude: ['<all>']
 			}
-		})
+		}),
+		alias: {
+			'$shared/types': 'api/types',
+			'$shared/validation': 'api/validation'
+		}
 	},
 	preprocess: [vitePreprocess({})],
 	compilerOptions: {

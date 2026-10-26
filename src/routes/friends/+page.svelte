@@ -5,10 +5,15 @@
 	import { onMount } from 'svelte';
 	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
 	import { goto } from '$app/navigation';
+	import { toast } from 'svelte-sonner';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { SERVER } from '$lib/api/server';
+	import type { Friend } from '$lib/types';
 
 	let selectedFriend = $state('');
 	let addingFriend = $state(false);
 	const pfpErrors = $state(new Set<string>());
+	const artErrors = new SvelteSet<string>();
 
 	onMount(async () => {
 		title.set('Friends');
@@ -19,26 +24,34 @@
 	async function addFriend() {
 		if (!selectedFriend.trim()) return;
 		addingFriend = true;
-		const user = await UserManager.getUserName(selectedFriend);
-		if (user?.id) {
-			await UserManager.addFriend(user.id);
-			selectedFriend = '';
-		}
+		const user = await UserManager.getUserName(selectedFriend.trim());
+		const result = user ? await UserManager.addFriend(user.id) : { error: 'User not found' };
+		if ('error' in result) toast.error('Friend request failed: ' + result.error);
+		else selectedFriend = '';
+		await refreshRequests();
 		addingFriend = false;
 	}
 
-	async function acceptRequest(userId: string) {
-		await UserManager.acceptRequest(userId);
-		await refreshRequests();
-		await refreshFriends();
+	async function update(change: Promise<{ success: true } | { error: string }>) {
+		const result = await change;
+		if ('error' in result) toast.error(result.error);
+		await Promise.all([refreshRequests(), refreshFriends()]);
 	}
 
-	async function rejectRequest(userId: string) {
-		await UserManager.rejectRequest(userId);
+	const acceptRequest = (userId: string) => update(UserManager.acceptRequest(userId));
+	const rejectRequest = (userId: string) => update(UserManager.rejectRequest(userId));
+	const removeFriend = (friendId: string) => update(UserManager.removeFriend(friendId));
+
+	function listeningText(friend: Friend) {
+		const current = friend.listening?.current;
+		if (current) return current.title + ' - ' + (current.artist || 'Unknown Artist');
+		const last = friend.listening?.lastPlayed;
+		if (last) return 'Last played ' + last.title + ' - ' + (last.artist || 'Unknown Artist');
 	}
 
-	async function removeFriend(friendId: string) {
-		await UserManager.removeFriend(friendId);
+	function artwork(friend: Friend) {
+		const id = friend.listening?.current?.artwork ?? friend.listening?.lastPlayed?.artwork;
+		return id ? `${SERVER}/public/get/albumArt/${friend.id}/${id}` : undefined;
 	}
 </script>
 
@@ -124,7 +137,7 @@
 				</Card>
 			</section>
 
-			{#if $pendingRequests && $pendingRequests.length > 0}
+			{#if $pendingRequests.incoming.length > 0 || $pendingRequests.outgoing.length > 0}
 				<section class="flex flex-col gap-3">
 					<div class="flex flex-col gap-1">
 						<p class="text-on-surface-variant text-xs tracking-[0.16em] uppercase">
@@ -135,79 +148,79 @@
 
 					<Card variant="outlined" class="p-6">
 						<div class="flex flex-col gap-4">
-							{#each $pendingRequests as request}
-								{#await UserManager.getUserbyId(request.user_id) then user}
-									{#if user}
-										<div
-											class="bg-surface-container-high flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between"
-										>
-											<div class="flex items-center gap-4">
-												{#if user.pfp && !pfpErrors.has(user.id)}
-													<img
-														src={user.pfp}
-														alt="Profile"
-														class="h-12 w-12 rounded-full object-cover"
-														onerror={() => pfpErrors.add(user.id)}
+							{#each [...$pendingRequests.incoming.map( (user) => ({ user, incoming: true }) ), ...$pendingRequests.outgoing.map( (user) => ({ user, incoming: false }) )] as { user, incoming } (user.id)}
+								<div
+									class="bg-surface-container-high flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between"
+								>
+									<div class="flex items-center gap-4">
+										{#if !pfpErrors.has(user.id)}
+											<img
+												src={`${SERVER}/public/get/pfp/${user.id}`}
+												alt="Profile"
+												class="h-12 w-12 rounded-full object-cover"
+												onerror={() => pfpErrors.add(user.id)}
+											/>
+										{:else}
+											<div
+												class="bg-primary/20 text-primary flex h-12 w-12 items-center justify-center rounded-full"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="24"
+													height="24"
+													viewBox="0 0 24 24"
+												>
+													<path
+														fill="currentColor"
+														d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
 													/>
-												{:else}
-													<div
-														class="bg-primary/20 text-primary flex h-12 w-12 items-center justify-center rounded-full"
-													>
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="24"
-															height="24"
-															viewBox="0 0 24 24"
-														>
-															<path
-																fill="currentColor"
-																d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
-															/>
-														</svg>
-													</div>
-												{/if}
-												<div>
-													<h3 class="text-on-surface font-semibold">
-														{user.name || user.username}
-													</h3>
-													<p class="text-on-surface-variant text-sm">@{user.username}</p>
-												</div>
+												</svg>
 											</div>
-											<div class="flex items-center gap-2">
-												<Button variant="filled" onclick={() => acceptRequest(request.user_id)}>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="20"
-														height="20"
-														viewBox="0 0 24 24"
-														class="mr-1"
-													>
-														<path
-															fill="currentColor"
-															d="m9 16.2l-3.5-3.5a.984.984 0 0 0-1.4 0a.984.984 0 0 0 0 1.4l4.19 4.19c.39.39 1.02.39 1.41 0L20.3 7.7a.984.984 0 0 0 0-1.4a.984.984 0 0 0-1.4 0z"
-														/>
-													</svg>
-													Accept
-												</Button>
-												<Button variant="outlined" onclick={() => rejectRequest(request.user_id)}>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="20"
-														height="20"
-														viewBox="0 0 24 24"
-														class="mr-1"
-													>
-														<path
-															fill="currentColor"
-															d="M18.3 5.71a.996.996 0 0 0-1.41 0L12 10.59L7.11 5.7A.996.996 0 1 0 5.7 7.11L10.59 12L5.7 16.89a.996.996 0 1 0 1.41 1.41L12 13.41l4.89 4.89a.996.996 0 1 0 1.41-1.41L13.41 12l4.89-4.89c.38-.38.38-1.02 0-1.4"
-														/>
-													</svg>
-													Decline
-												</Button>
-											</div>
+										{/if}
+										<div>
+											<h3 class="text-on-surface font-semibold">
+												{user.name || user.username}
+											</h3>
+											<p class="text-on-surface-variant text-sm">
+												@{user.username}{incoming ? '' : ' · Request sent'}
+											</p>
 										</div>
-									{/if}
-								{/await}
+									</div>
+									<div class="flex items-center gap-2">
+										{#if incoming}
+											<Button variant="filled" onclick={() => acceptRequest(user.id)}>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="20"
+													height="20"
+													viewBox="0 0 24 24"
+													class="mr-1"
+												>
+													<path
+														fill="currentColor"
+														d="m9 16.2l-3.5-3.5a.984.984 0 0 0-1.4 0a.984.984 0 0 0 0 1.4l4.19 4.19c.39.39 1.02.39 1.41 0L20.3 7.7a.984.984 0 0 0 0-1.4a.984.984 0 0 0-1.4 0z"
+													/>
+												</svg>
+												Accept
+											</Button>
+										{/if}
+										<Button variant="outlined" onclick={() => rejectRequest(user.id)}>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="20"
+												height="20"
+												viewBox="0 0 24 24"
+												class="mr-1"
+											>
+												<path
+													fill="currentColor"
+													d="M18.3 5.71a.996.996 0 0 0-1.41 0L12 10.59L7.11 5.7A.996.996 0 1 0 5.7 7.11L10.59 12L5.7 16.89a.996.996 0 1 0 1.41 1.41L12 13.41l4.89 4.89a.996.996 0 1 0 1.41-1.41L13.41 12l4.89-4.89c.38-.38.38-1.02 0-1.4"
+												/>
+											</svg>
+											{incoming ? 'Decline' : 'Cancel'}
+										</Button>
+									</div>
+								</div>
 							{/each}
 						</div>
 					</Card>
@@ -228,9 +241,9 @@
 									class="bg-surface-container-high flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between"
 								>
 									<div class="flex min-w-0 items-center gap-4">
-										{#if friend.pfp && !pfpErrors.has(friend.id)}
+										{#if !pfpErrors.has(friend.id)}
 											<img
-												src={friend.pfp}
+												src={`${SERVER}/public/get/pfp/${friend.id}`}
 												alt="Profile"
 												class="h-12 w-12 flex-shrink-0 rounded-full object-cover"
 												onerror={() => pfpErrors.add(friend.id)}
@@ -257,23 +270,32 @@
 												{friend.name || friend.username}
 											</h3>
 											<p class="text-on-surface-variant truncate text-sm">@{friend.username}</p>
-											{#if friend.nowPlaying}
+											{#if listeningText(friend)}
+												{@const art = artwork(friend)}
 												<div class="mt-1 flex items-center gap-2">
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="16"
-														height="16"
-														viewBox="0 0 24 24"
-														class="text-primary flex-shrink-0"
-													>
-														<path
-															fill="currentColor"
-															d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
+													{#if art && !artErrors.has(art)}
+														<img
+															src={art}
+															alt="Album art"
+															class="h-4 w-4 flex-shrink-0 rounded object-cover"
+															onerror={() => artErrors.add(art)}
 														/>
-													</svg>
+													{:else}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="16"
+															height="16"
+															viewBox="0 0 24 24"
+															class="text-primary flex-shrink-0"
+														>
+															<path
+																fill="currentColor"
+																d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
+															/>
+														</svg>
+													{/if}
 													<p class="text-on-surface-variant truncate text-xs">
-														{friend.nowPlaying.title || 'Unknown Track'} - {friend.nowPlaying
-															.artist || 'Unknown Artist'}
+														{listeningText(friend)}
 													</p>
 												</div>
 											{/if}

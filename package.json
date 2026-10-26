@@ -38,8 +38,10 @@
 		"vite-plugin-devtools-json": "^0.2.0"
 	},
 	"dependencies": {
+		"@better-auth/passkey": "1.7.13",
 		"@ktibow/material-color-utilities-nightly": "^0.3.11755307340811",
 		"@vite-pwa/sveltekit": "^1.0.0",
+		"better-auth": "1.7.13",
 		"express": "^5.1.0",
 		"m3-svelte": "^4.6.2",
 		"music-metadata": "^11.16.1",
@@ -50,7 +52,8 @@
 		"svelte-lazy": "^1.2.11",
 		"svelte-sonner": "^1.0.5",
 		"sveltekit-sitemap": "^1.0.21",
-		"uuid": "^11.1.1"
+		"uuid": "^11.1.1",
+		"zod": "4.6.7"
 	},
 	"overrides": {
 		"@sveltejs/kit": {

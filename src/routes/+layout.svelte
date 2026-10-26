@@ -5,30 +5,27 @@
 	import BottomBar from '$lib/components/BottomBar.svelte';
 	import MobileNowPlaying from '$lib/components/MobileNowPlaying.svelte';
 	import MobileBottomNav from '$lib/components/MobileBottomNav.svelte';
-	import { isLoggedIn, title, loadPreferencesStore, SavedUser, socket, UserInfo, appUpdateReady } from '$lib/store';
-	import { UserManager } from '$lib/api/UserManager';
+	import { title, loadPreferencesStore, appUpdateReady } from '$lib/store';
+	import { loadSession } from '$lib/api/auth';
 	import { onMount } from 'svelte';
 	import { Snackbar } from 'm3-svelte';
 	import { initTheme } from '$lib/theme/theme';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { base, resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { socketManager } from '$lib/socketManager';
-	import { io } from 'socket.io-client';
-	import { browser, dev } from '$app/environment';
-	import UserSettings from '$lib/preferences/usersettings';
-	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
-	import { SERVER } from '$lib/api/server';
+	import '$lib/socketManager';
+	import { dev } from '$app/environment';
 	import { Toaster } from 'svelte-sonner';
 	import { createLibrary } from '$lib/library';
 	import LibraryImportSheet from '$lib/components/LibraryImportSheet.svelte';
+	import PasskeyPrompt from '$lib/components/PasskeyPrompt.svelte';
 
 	let { children, data } = $props();
 	let initialNavigation = true;
+	const transientPaths = ['/onboard', '/login', '/register', '/verified', '/reset-password'];
 
 	function rememberAppRoute(url: URL, storage: Storage, initial: boolean): string | null {
 		const routeKey = 'app.lastRoute';
-		const transientPaths = ['/onboard', '/login', '/register'];
 		const current = new URL(url);
 		const appLaunch = current.searchParams.get('launch') === 'pwa';
 		if (appLaunch) current.searchParams.delete('launch');
@@ -88,39 +85,11 @@
 
 		const hasOnboarded = localStorage.getItem('hasOnboarded');
 		const currentPath = $page.url.pathname;
-		const excludedPaths = ['/onboard', '/login', '/register'];
-		if (!hasOnboarded && !excludedPaths.includes(currentPath)) {
+		if (!hasOnboarded && !transientPaths.includes(currentPath)) {
 			goto('/onboard');
 		}
 
-		const isLoggedInValue = await UserManager.checkSession();
-		if (isLoggedInValue) {
-			isLoggedIn.set(true);
-		} else {
-			isLoggedIn.set(false);
-		}
-
-		const user = await UserManager.getUser();
-		if (user) {
-			SavedUser.set(user);
-		}
-
-		if (browser) {
-			if ($isLoggedIn) {
-				if (UserSettings.preferences.socket) {
-					const io2 = io(`${SERVER}`, {
-						withCredentials: true
-					});
-					socket.set(io2);
-					$socket?.on('connect', () => {
-						console.log('Connected to server');
-					});
-					socketManager();
-					refreshFriends();
-					refreshRequests();
-				}
-			}
-		}
+		await loadSession();
 	});
 </script>
 
@@ -142,9 +111,12 @@
 
 <LibraryImportSheet />
 
+<PasskeyPrompt />
+
 <Toaster position="bottom-right" />
 
 <svelte:head>
+	<link rel="manifest" href={`${base}/${dev ? 'manifest.json' : 'manifest.webmanifest'}`} />
 	<title>{$title}</title>
 </svelte:head>
 

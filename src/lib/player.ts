@@ -7,11 +7,11 @@ import {
 	audioPlayer,
 	context,
 	curTime,
+	isLoggedIn,
 	queueState,
 	recentlyPlayedManager,
 	SavedUser,
 	setCurTime,
-	socket,
 	loopEnabled,
 	shuffleEnabled,
 	originalQueue,
@@ -20,9 +20,8 @@ import {
 import { statsManager } from '$lib/stats';
 import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
-import { UserManager } from './api/UserManager';
 import { SERVER } from '$lib/api/server';
-import { playbackSnapshot, prepareRpcArtwork } from '$lib/rpc';
+import { claimPlayback, ownsPlayback } from '$lib/playback';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
@@ -69,9 +68,10 @@ function setMediaAction(action: MediaSessionAction, handler: MediaSessionActionH
 }
 
 function playAudio(audio: HTMLAudioElement) {
-	void audio.play().catch((error) => {
+	return audio.play().then(() => true).catch((error) => {
 		syncAudioState(audio);
 		if (error.name !== 'AbortError') console.error('Unable to play audio:', error);
+		return false;
 	});
 }
 
@@ -83,7 +83,7 @@ function initMediaSession() {
 		const state = get(audioPlayer);
 		if (state.audio instanceof HTMLAudioElement && state.audio.paused) {
 			statsManager.recordResume();
-			playAudio(state.audio);
+			resume(state.audio);
 		}
 	});
 
@@ -182,30 +182,34 @@ async function getImageFile(imagePath: string): Promise<File> {
 	return new File([arrayBuffer], imagePath, { type: 'image/jpeg' });
 }
 
-async function uploadAlbumArt(song: Song, artworkRequestId: string): Promise<boolean> {
-	const isLoggedIn = await UserManager.isLoggedIn();
-	if (!isLoggedIn) return false;
-
-	if (!song.image) return false;
+async function albumArtFile(song: Song): Promise<File | undefined> {
+	if (!song.image) return undefined;
 
 	try {
 		const image = typeof song.image === 'string' ? await getImageFile(song.image) : song.image;
-		if (!image.size) return false;
+		if (!image.size) return undefined;
 		const imageBuffer = await image.arrayBuffer();
-		const imageFile = new File([imageBuffer], 'album.jpg', { type: 'image/jpeg' });
-		const result = await UserManager.setAlbumArt(imageFile, artworkRequestId);
-		return result.success === true;
+		return new File([imageBuffer], 'album.jpg', { type: 'image/jpeg' });
 	} catch (error) {
 		console.error('Error uploading album art:', error);
-		return false;
+		return undefined;
 	}
+}
+
+function claim(song: Song) {
+	void claimPlayback(song, () => albumArtFile(song));
+}
+
+async function resume(audio: HTMLAudioElement) {
+	const song = get(activeSong);
+	const request = playbackRequest;
+	if (await playAudio(audio) && song?.id && request === playbackRequest && !ownsPlayback()) claim(song);
 }
 
 async function sendWebhook(song: Song) {
 	if (!UserSettings.webhook.enabled || !UserSettings.webhook.url) return;
 
-	const isLoggedIn = await UserManager.isLoggedIn();
-	if (!isLoggedIn) return;
+	if (!get(isLoggedIn)) return;
 
 	if (!song.image || typeof song.image !== 'string') return;
 
@@ -255,26 +259,6 @@ async function sendWebhook(song: Song) {
 	}
 }
 
-async function emitNowPlaying(song: Song) {
-	const s = get(socket);
-	const user = get(SavedUser);
-	if (!s || !user?.id) return;
-	const formatted = new Date().toISOString().slice(0, 19).replace('T', ' ');
-	const payload = {
-		...playbackSnapshot(),
-		title: song.title,
-		artist: song.artist,
-		album: song.album,
-		discord: UserSettings.discord.enabled,
-		id: user.id,
-		timePlayed: formatted,
-		source: 'Web'
-	};
-	s.emit('nowPlaying', { nowPlaying: payload });
-
-	await sendWebhook(song);
-}
-
 function audioKey(song: Song) {
 	return `${song.id}.${song.ext}`;
 }
@@ -314,7 +298,6 @@ async function playAtIndex(index: number) {
 	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
 	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
 	if (!blob || request !== playbackRequest) return;
-	prepareRpcArtwork(song.id, artworkRequestId => uploadAlbumArt(song, artworkRequestId));
 	updateQueue(state.items, normalized, state.source);
 	activeSong.set(song);
 	statsManager.recordPlay(song, state.source);
@@ -322,6 +305,7 @@ async function playAtIndex(index: number) {
 	const audioUrl = URL.createObjectURL(blob);
 	curTime.set(0);
 	setCurTime.set(0);
+	let started: Promise<boolean> | undefined;
 	audioPlayer.update((value) => {
 		const audio = value.audio ?? (browser ? new Audio() : null);
 		if (audio) {
@@ -329,7 +313,7 @@ async function playAtIndex(index: number) {
 			revokeCurrentAudioUrl();
 			currentAudioUrl = audioUrl;
 			audio.src = audioUrl;
-			playAudio(audio);
+			started = playAudio(audio);
 			audio.addEventListener('loadedmetadata', () => {
 				updateMediaSessionPositionState(audio);
 			}, { once: true });
@@ -344,7 +328,8 @@ async function playAtIndex(index: number) {
 		}).catch(() => {});
 	}
 	prepareNextAudio();
-	void emitNowPlaying(song).catch((error) => console.error('Unable to report playback:', error));
+	if (await started && request === playbackRequest) claim(song);
+	void sendWebhook(song);
 }
 
 export async function startPlayback(
@@ -411,7 +396,7 @@ export function togglePlay() {
 		state.audio.pause();
 	} else {
 		statsManager.recordResume();
-		playAudio(state.audio);
+		resume(state.audio);
 	}
 	updateMediaSessionPositionState(state.audio);
 } 
