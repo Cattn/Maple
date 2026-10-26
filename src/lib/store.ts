@@ -103,8 +103,9 @@ export const recentlyPlayedManager = {
 	},
 	load: () => {
 		if (!browser) return;
-		const stored = JSON.parse(localStorage.getItem('recentlyPlayed') || '[]');
-		recentlyPlayed.set(stored);
+		const stored = localStorage.getItem('recentlyPlayed') || '[]';
+		if (stored === JSON.stringify(get(recentlyPlayed))) return;
+		recentlyPlayed.set(JSON.parse(stored));
 	},
 	clear: () => {
 		if (browser) localStorage.removeItem('recentlyPlayed');
