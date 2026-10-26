@@ -79,7 +79,13 @@
 
 	async function enroll(event: SubmitEvent) {
 		event.preventDefault();
-		if (busy || !email || emailIssue || (needsNewUsername && (!newUsername || newUsernameIssue))) {
+		if (
+			busy ||
+			!password ||
+			!email ||
+			emailIssue ||
+			(needsNewUsername && (!newUsername || newUsernameIssue))
+		) {
 			return;
 		}
 		busy = true;
@@ -108,7 +114,7 @@
 
 	onMount(() => {
 		if ($isLoggedIn) {
-			goto('/settings');
+			goto(resolve('/settings'));
 		}
 	});
 
@@ -132,6 +138,22 @@
 			</div>
 
 			<form onsubmit={enroll} class="flex flex-col gap-6">
+				<div class="flex flex-col gap-1">
+					<TextFieldOutlined
+						label="Original username"
+						autocomplete="username"
+						bind:value={username}
+					/>
+					<p class="text-on-surface-variant text-sm">
+						Enter it exactly as before, or leave it empty if your old username was blank.
+					</p>
+				</div>
+				<TextFieldOutlined
+					label="Password"
+					bind:value={password}
+					type="password"
+					autocomplete="current-password"
+				/>
 				<div class="flex flex-col gap-1">
 					<TextFieldOutlined
 						label="Email"
@@ -190,6 +212,9 @@
 					<Button variant="text" onclick={() => goto(resolve('/reset-password'))}
 						>Forgot password?</Button
 					>
+					<Button variant="text" onclick={() => ((mode = 'enroll'), (message = ''))}
+						>Move an existing account</Button
+					>
 				</div>
 			</form>
 		{/if}
@@ -202,7 +227,9 @@
 
 		<div class="flex flex-col gap-3">
 			{#if mode === 'signin'}
-				<Button variant="outlined" onclick={() => goto('/register')}>Create an account</Button>
+				<Button variant="outlined" onclick={() => goto(resolve('/register'))}
+					>Create an account</Button
+				>
 			{:else}
 				<Button variant="outlined" onclick={() => ((mode = 'signin'), (message = ''))}
 					>Back to sign in</Button
