@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import type { ZodType } from 'zod';
-	import { title } from '$lib/store';
+	import { isLoggedIn, title } from '$lib/store';
+	import { resolve } from '$app/paths';
 	import { authClient, errorMessage, verifiedURL } from '$lib/api/auth';
 	import VerifyEmail from '$lib/components/VerifyEmail.svelte';
 	import {
@@ -53,6 +54,10 @@
 		});
 		return error;
 	}
+
+	$effect(() => {
+		if ($isLoggedIn) void goto(resolve('/'), { replaceState: true });
+	});
 
 	onMount(async () => {
 		title.set('Register');

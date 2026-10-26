@@ -61,6 +61,25 @@
 		} catch {}
 	});
 
+	onMount(() => {
+		const refreshSession = () => {
+			if (
+				document.visibilityState === 'visible' &&
+				['/login', '/register', '/verified'].includes($page.url.pathname)
+			) {
+				void loadSession();
+			}
+		};
+		window.addEventListener('focus', refreshSession);
+		window.addEventListener('pageshow', refreshSession);
+		document.addEventListener('visibilitychange', refreshSession);
+		return () => {
+			window.removeEventListener('focus', refreshSession);
+			window.removeEventListener('pageshow', refreshSession);
+			document.removeEventListener('visibilitychange', refreshSession);
+		};
+	});
+
 	onMount(async () => {
 		if (!dev && 'serviceWorker' in navigator) {
 			void navigator.serviceWorker.register(`${base}/sw.js`, {

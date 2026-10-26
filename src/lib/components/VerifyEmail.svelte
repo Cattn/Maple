@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button, TextFieldOutlined } from 'm3-svelte';
-	import { enrollLegacyAccount, errorMessage, type AuthError } from '$lib/api/auth';
+	import { enrollLegacyAccount, errorMessage, loadSession, type AuthError } from '$lib/api/auth';
+	import { onMount } from 'svelte';
 	import { emailSchema, firstIssue } from '$shared/validation/account';
 
 	let {
@@ -22,6 +23,15 @@
 	let emailIssue = $derived(
 		newEmail ? firstIssue(emailSchema.safeParse(newEmail.trim())) : undefined
 	);
+
+	onMount(() => {
+		const checkSession = () => {
+			if (document.visibilityState === 'visible') void loadSession();
+		};
+		checkSession();
+		const interval = window.setInterval(checkSession, 5000);
+		return () => window.clearInterval(interval);
+	});
 
 	async function run(action: () => Promise<AuthError>, success: string) {
 		busy = true;

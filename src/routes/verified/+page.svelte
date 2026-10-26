@@ -4,10 +4,16 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { title } from '$lib/store';
+	import { isLoggedIn, title } from '$lib/store';
 	import { loadSession } from '$lib/api/auth';
 
 	let status = $state<'checking' | 'verified' | 'signin' | 'failed'>('checking');
+
+	$effect(() => {
+		if ($isLoggedIn && !page.url.searchParams.get('error')) {
+			void goto(resolve('/'), { replaceState: true });
+		}
+	});
 
 	onMount(async () => {
 		title.set('Email verification');

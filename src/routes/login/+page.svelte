@@ -40,8 +40,9 @@
 	}
 
 	async function finish() {
-		if (await loadSession(true)) goto(resolve('/'));
-		else message = 'You are signed in, but your profile could not be loaded. Try again.';
+		if (!(await loadSession(true))) {
+			message = 'You are signed in, but your profile could not be loaded. Try again.';
+		}
 	}
 
 	async function onSubmit(event: SubmitEvent) {
@@ -112,9 +113,9 @@
 		message = errorMessage(error);
 	}
 
-	onMount(() => {
+	$effect(() => {
 		if ($isLoggedIn) {
-			goto(resolve('/settings'));
+			void goto(resolve('/'), { replaceState: true });
 		}
 	});
 
