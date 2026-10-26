@@ -37,3 +37,9 @@ export function isClaimableUsername(value: unknown): value is string {
 export function firstIssue(result: z.ZodSafeParseResult<unknown>) {
 	return result.success ? undefined : (result.error.issues[0]?.message ?? 'Invalid value.');
 }
+
+export const displayNameSchema = z
+	.string('Display name is required.')
+	.trim()
+	.min(1, 'Display name is required.')
+	.max(64, 'Display name must be at most 64 characters.');

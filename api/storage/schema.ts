@@ -103,7 +103,10 @@ const upgrades = [
 	WHEN NEW."providerId" = 'credential'
 	BEGIN
 		UPDATE users SET password = NULL WHERE id = NEW."userId";
-	END;`
+	END;`,
+	`ALTER TABLE users ADD COLUMN listening_visibility TEXT NOT NULL DEFAULT 'public'
+		CHECK (listening_visibility IN ('public', 'private'));
+	ALTER TABLE live_status ADD COLUMN artwork_id TEXT;`
 ];
 
 export const currentVersion = upgrades.length + 1;

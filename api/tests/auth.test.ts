@@ -134,15 +134,17 @@ test('signup requires email verification before any usable session', async () =>
 	assert.equal(signIn.status, 403);
 	assert.equal((await json(signIn)).code, 'EMAIL_NOT_VERIFIED');
 	assert.equal(client.cookie, '');
-	assert.equal((await client.request(`/get/user/${row.id}`)).status, 401);
+	assert.equal((await client.request('/get/me')).status, 401);
 
 	const verified = await client.request(harness.mailbox.link(email));
 	assert.equal(verified.status, 302);
-	assert.deepEqual(await json(await client.request(`/get/user/${row.id}`)), {
+	assert.deepEqual(await json(await client.request('/get/me')), {
 		username: 'NewUser',
 		id: row.id,
 		name: null,
-		pfp: null
+		pfp: null,
+		listeningVisibility: 'public',
+		listening: { current: null, lastPlayed: null }
 	});
 
 	const other = harness.client();
@@ -151,7 +153,7 @@ test('signup requires email verification before any usable session', async () =>
 		password: strongPassword
 	});
 	assert.equal(byName.status, 200);
-	assert.equal((await other.request(`/get/user/${row.id}`)).status, 200);
+	assert.equal((await other.request('/get/me')).status, 200);
 });
 
 test('signup enforces username and password policy and reserved names', async () => {
@@ -239,11 +241,13 @@ test('legacy enrollment keeps IDs, profile data, relationships and old weak pass
 	assert.equal((await json(early)).code, 'EMAIL_NOT_VERIFIED');
 	await client.request(harness.mailbox.link(email));
 	assert.notEqual(profile(id)?.last_login, before?.last_login);
-	assert.deepEqual(await json(await client.request(`/get/user/${id}`)), {
+	assert.deepEqual(await json(await client.request('/get/me')), {
 		username: 'OldTimer',
 		id,
 		name: 'Old Timer',
-		pfp: pfp.toString('base64')
+		pfp: pfp.toString('base64'),
+		listeningVisibility: 'public',
+		listening: { current: null, lastPlayed: null }
 	});
 
 	const again = harness.client();
@@ -653,8 +657,8 @@ test('logout ends only its session, revocation ends all and old JWT cookies are 
 	assert.equal((await first.post('/api/auth/sign-out')).status, 200);
 	assert.equal(await firstGone, 'io server disconnect');
 	assert.equal(secondSocket.connected, true);
-	assert.equal((await first.request(`/get/user/${id}`)).status, 401);
-	assert.equal((await second.request(`/get/user/${id}`)).status, 200);
+	assert.equal((await first.request('/get/me')).status, 401);
+	assert.equal((await second.request('/get/me')).status, 200);
 
 	const third = harness.client();
 	await third.post('/api/auth/sign-in/username', {
@@ -664,12 +668,12 @@ test('logout ends only its session, revocation ends all and old JWT cookies are 
 	const secondGone = next(secondSocket, 'disconnect');
 	assert.equal((await second.post('/api/auth/revoke-sessions')).status, 200);
 	assert.equal(await secondGone, 'io server disconnect');
-	assert.equal((await second.request(`/get/user/${id}`)).status, 401);
-	assert.equal((await third.request(`/get/user/${id}`)).status, 401);
+	assert.equal((await second.request('/get/me')).status, 401);
+	assert.equal((await third.request('/get/me')).status, 401);
 
 	const legacy = harness.client();
 	legacy.setCookie('token', oldJwt(id));
-	assert.equal((await legacy.request(`/get/user/${id}`)).status, 401);
+	assert.equal((await legacy.request('/get/me')).status, 401);
 	const rejected = legacy.socket();
 	const error = await next(rejected, 'connect_error');
 	assert.ok(error instanceof Error);
@@ -781,12 +785,12 @@ test('deleting a Maple account removes its auth identity and sessions', async ()
 	const socket = client.socket();
 	await next(socket, 'connect');
 	const gone = next(socket, 'disconnect');
-	const response = await client.request(`/user/manage/delete/${id}`, { method: 'DELETE' });
+	const response = await client.request('/user/manage/me', { method: 'DELETE' });
 	assert.equal(response.status, 200);
 	assert.equal(await gone, 'io server disconnect');
 	for (const table of ['auth_user', 'auth_session', 'auth_account']) {
 		const column = table === 'auth_user' ? 'id' : 'userId';
 		assert.equal(harness.db.all(`SELECT 1 FROM ${table} WHERE ${column} = ?`, [id]).length, 0);
 	}
-	assert.equal((await client.request(`/get/user/${id}`)).status, 401);
+	assert.equal((await client.request('/get/me')).status, 401);
 });

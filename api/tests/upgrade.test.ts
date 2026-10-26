@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createFile } from '../storage/create-file.js';
 import { importSnapshot, type Source } from '../storage/import.js';
 import { openDatabase } from '../storage/sqlite.js';
-import { currentVersion, tablesAt } from '../storage/schema.js';
+import { currentVersion, tables, tablesAt } from '../storage/schema.js';
 import { inspectFile, upgradeFile } from '../storage/upgrade.js';
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'maple-upgrade-test-'));
@@ -79,9 +79,9 @@ function dump(filename: string) {
 	const database = new DatabaseSync(filename, { readOnly: true });
 	try {
 		return Object.fromEntries(
-			['users', 'live_status', 'friends_db', 'pending_requests'].map((table) => [
+			Object.entries(tables).map(([table, columns]) => [
 				table,
-				database.prepare(`SELECT rowid, * FROM ${table} ORDER BY rowid`).all()
+				database.prepare(`SELECT rowid, ${columns.join(', ')} FROM ${table} ORDER BY rowid`).all()
 			])
 		);
 	} finally {
@@ -449,5 +449,42 @@ test('validates auth tables, indexes and triggers at startup', async () => {
 		writer.exec(change);
 		writer.close();
 		assert.throws(() => openDatabase(altered), /Unexpected SQLite schema/, change);
+	}
+});
+
+test('upgrades version 3 files with public listening and no artwork version', async () => {
+	const v3 = file('third.sqlite');
+	await createFile(
+		v3,
+		(database) => {
+			database.exec(`
+			INSERT INTO users (id, username, password, creation_date)
+				VALUES ('a1', 'alice', '$2b$10$hash', '2020-01-01 00:00:00');
+			INSERT INTO live_status (user_id, playing, albumArt)
+				VALUES ('A1', '{"title":"Song","timePlayed":"2020-01-01 00:00:00"}', x'ffd8ff');
+		`);
+		},
+		undefined,
+		3,
+		3
+	);
+	assert.equal(inspectFile(v3).version, 3);
+	assert.throws(() => openDatabase(v3), /version 3 is outdated/);
+	const output = file('third-v4.sqlite');
+	await upgradeFile(v3, output);
+	assert.deepEqual(dump(output), dump(v3));
+	assert.equal(inspectFile(output).version, currentVersion);
+	const db = openDatabase(output);
+	try {
+		assert.deepEqual(db.all('SELECT listening_visibility FROM users'), [
+			{ listening_visibility: 'public' }
+		]);
+		assert.deepEqual(db.all('SELECT artwork_id FROM live_status'), [{ artwork_id: null }]);
+		assert.throws(
+			() => db.run("UPDATE users SET listening_visibility = 'friends'"),
+			/CHECK constraint failed/
+		);
+	} finally {
+		db.close();
 	}
 });

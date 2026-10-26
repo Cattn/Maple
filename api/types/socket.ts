@@ -1,67 +1,27 @@
 import type { Server, Socket } from 'socket.io';
 import type { SessionUser } from './auth.js';
+import type { Listening, PlaybackReply, RpcUpdate } from './playback.js';
 
-export interface RpcSnapshot {
-	title: string;
-	artist: string;
-	album: string;
-	image: string | undefined;
-	artworkRequestId: string | undefined;
-	artworkReady: boolean | undefined;
-	artworkWait: number | undefined;
-	id: string;
-	playing: true;
-	position: number;
-	duration: number | undefined;
-	playbackRate: number;
-}
-
-export type RpcState = RpcSnapshot | { playing: false };
-
-export type RpcUpdate =
-	| { playing: false }
-	| {
-			artist: string | undefined;
-			title: string | undefined;
-			state: string | undefined;
-			largeImageKey: string;
-			largeImageText: string | undefined;
-			id: string;
-			album: string | undefined;
-			artworkRequestId: string | undefined;
-			artworkReady: boolean | undefined;
-			artworkWait: number | undefined;
-			playing: true;
-			position: number;
-			duration: number | undefined;
-			playbackRate: number;
-			smallImageKey: string;
-			smallText: string;
-			buttons: { label: string; url: string }[];
-	  };
+type Reply = (result: PlaybackReply) => void;
 
 export interface ClientEvents {
-	nowPlaying: (data: unknown) => void;
-	playbackState: (data: unknown) => void;
-	rpcOwnershipRequest: () => void;
+	playbackStart: (data: unknown, reply?: Reply) => void;
+	playbackUpdate: (data: unknown, reply?: Reply) => void;
+	playbackStop: (data: unknown, reply?: Reply) => void;
 }
 
 export interface ServerEvents {
 	friendRequest: (data: { id: string }) => void;
-	nowPlaying: (data: { nowPlaying: Record<string, unknown>; id: string }) => void;
+	friendRemoved: (data: { id: string }) => void;
+	listening: (data: { id: string; listening: Listening | null }) => void;
+	playbackOwnership: (data: { playbackId: string | null }) => void;
 	rpcUpdate: (data: RpcUpdate) => void;
-	rpcOwnership: (data: { generation: string; owned: boolean }) => void;
-	albumArtUploaded: (data: { id: string; artworkRequestId: string | undefined }) => void;
-	invalidNowPlaying: (data: { message: string[] }) => void;
-	semiValidNowPlaying: (data: { message: string[] }) => void;
-	error: (message: string) => void;
 	requestAccepted: (data: { id: string; message: string }) => void;
 	acceptedRequest: (data: { id: string; message: string }) => void;
 }
 
 export interface SocketData {
 	user: SessionUser;
-	rpcSuperseded?: boolean;
 }
 
 export type MapleServer = Server<ClientEvents, ServerEvents, Record<string, never>, SocketData>;

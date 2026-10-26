@@ -7,6 +7,7 @@
 	"scripts": {
 		"build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"fs.cpSync('storage/schema.sql','dist/storage/schema.sql')\"",
 		"start": "node dist/maple.js",
+		"peer": "node dist/scripts/peer-server.js",
 		"dev": "tsx watch maple.ts --dev",
 		"typecheck": "tsc -p tsconfig.json",
 		"lint": "eslint .",
