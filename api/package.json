@@ -9,6 +9,7 @@
 		"start": "node dist/maple.js",
 		"peer": "node dist/scripts/peer-server.js",
 		"dev": "tsx watch maple.ts --dev",
+		"preview": "tsx scripts/preview.ts",
 		"typecheck": "tsc -p tsconfig.json",
 		"lint": "eslint .",
 		"test": "node --import tsx --test --test-force-exit \"tests/*.test.ts\"",
