@@ -210,7 +210,11 @@
 					<Button variant="outlined" onclick={signInWithPasskey} disabled={busy}
 						>Sign in with a passkey</Button
 					>
-					<Button variant="text" onclick={() => goto(resolve('/reset-password'))}
+					<Button
+						variant="text"
+						type="button"
+						style="align-self: center; height: 2rem; padding-inline: 0.75rem; font-size: 0.8125rem;"
+						onclick={() => goto(resolve('/reset-password'))}
 						>Forgot password?</Button
 					>
 					<Button variant="text" onclick={() => ((mode = 'enroll'), (message = ''))}

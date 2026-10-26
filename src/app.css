@@ -24,6 +24,14 @@ body {
 	--cp-button-hover-color: rgb(var(--m3-scheme-surface-container-highest));
 }
 
+.bg-surface-container-high {
+	--m3-util-background: var(--m3-scheme-surface-container-high);
+}
+
+.m3-container > :is(input, textarea):placeholder-shown:not(:focus) ~ label {
+	background-color: transparent;
+}
+
 html {
 	box-sizing: border-box;
 }
