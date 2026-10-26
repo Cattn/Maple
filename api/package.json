@@ -12,7 +12,9 @@
 		"lint": "eslint .",
 		"test": "node --import tsx --test --test-force-exit \"tests/*.test.ts\"",
 		"db:init": "node dist/scripts/init-sqlite.js",
-		"db:migrate:mysql": "node dist/scripts/migrate-mysql.js"
+		"db:migrate:mysql": "node dist/scripts/migrate-mysql.js",
+		"db:preflight": "node dist/scripts/preflight-sqlite.js",
+		"db:upgrade": "node dist/scripts/upgrade-sqlite.js"
 	},
 	"repository": {
 		"type": "git",
