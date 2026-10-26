@@ -7,7 +7,7 @@ module.exports = [
 		ignores: [
 			'.DS_Store',
 			'node_modules',
-			'api',
+			'api/dist',
 			'build',
 			'.svelte-kit',
 			'package',
