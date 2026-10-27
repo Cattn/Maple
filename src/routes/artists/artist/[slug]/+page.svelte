@@ -4,7 +4,7 @@
 	import Track from '$lib/components/Track.svelte';
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import Filters from '$lib/components/Filters.svelte';
-	import { flip } from 'svelte/animate';
+	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
 	import { onMount } from 'svelte';
 	import { title } from '$lib/store';
@@ -110,7 +110,7 @@
 			class="grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-3 md:grid-cols-3 md:gap-x-4 lg:grid-cols-4 lg:gap-x-6 xl:grid-cols-5"
 		>
 			{#each sortedAlbums as album (album.id)}
-				<div class="min-w-0 will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>
+				<div class="min-w-0" animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
 					<Track {album} type="album" />
 				</div>
 			{/each}
@@ -136,7 +136,7 @@
 		<div class="bg-surface-container rounded-xl">
 			<ul class="divide-outline-variant divide-y">
 				{#each sortedTracks as track, i (track.id)}
-					<li animate:flip={{ duration: 300, easing: cubicOut }}>
+					<li animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
 						<ListTrack
 							{track}
 							index={i + 1}

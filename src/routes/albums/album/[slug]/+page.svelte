@@ -2,7 +2,7 @@
 	import { OPFS } from '$lib/opfs';
 	import type { Album, Song } from '$lib/types';
 	import { Button } from 'm3-svelte';
-	import { flip } from 'svelte/animate';
+	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import Filters from '$lib/components/Filters.svelte';
@@ -230,7 +230,7 @@
 		<div class="bg-surface-container mt-2 rounded-xl">
 			<ul class="divide-outline-variant divide-y">
 				{#each renderItems as item, k (item.kind === 'track' ? item.track.id : `disc-${item.key}`)}
-					<li animate:flip={{ duration: 300, easing: cubicOut }}>
+					<li animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
 						{#if item.kind === 'header'}
 							{#if !item.first}
 								<hr class="border-outline-variant" />

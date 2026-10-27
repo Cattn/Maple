@@ -3,7 +3,7 @@
 	import { queueState } from '$lib/store';
 	import { get } from 'svelte/store';
 	import ListTrack from '$lib/components/ListTrack.svelte';
-	import { flip } from 'svelte/animate';
+	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
 	import type { Song } from '$lib/types';
 
@@ -128,7 +128,7 @@
 				<ul class="divide-outline-variant/50 divide-y">
 					{#each itemsCache as item, index (item.id)}
 						<li
-							animate:flip={{ duration: 300, easing: cubicOut }}
+							animate:visibleFlip={{ duration: 300, easing: cubicOut }}
 							class={$queueState.currentIndex === index ? 'bg-primary-container/30' : ''}
 						>
 							<ListTrack

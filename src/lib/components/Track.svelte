@@ -21,6 +21,7 @@
 	let showMenu = $state(false);
 	let showPlaylistSubmenu = $state(false);
 	let content: HTMLDivElement | undefined = $state(undefined);
+	let card: HTMLDivElement | undefined = $state(undefined);
 	let hideSubmenuTimeout: number | null = null;
 
 	let {
@@ -42,6 +43,11 @@
 	} = $props();
 
 	const USE_ARTIST_SVG = true;
+
+	let imagePath = $derived(
+		(track?.image || playlist?.image || album?.image || artist?.image) as string | undefined
+	);
+	let cachedImageUrl = $derived(imagePath && OPFS.cachedImageUrl(imagePath));
 
 	function portalToBody(node: HTMLElement) {
 		if (typeof document !== 'undefined' && node.parentNode !== document.body) {
@@ -133,12 +139,24 @@
 		}
 	}
 
+	function onPageKeydown(e: KeyboardEvent): void {
+		if (!showMenu || e.key !== 'Escape') return;
+		showMenu = false;
+		showPlaylistSubmenu = false;
+		card?.focus();
+	}
+
+	function handleCardKeydown(e: KeyboardEvent): void {
+		if (e.target === e.currentTarget && e.key === 'Enter') handleTrackClick();
+	}
+
 	function getContextMenuDimension(node: HTMLDivElement): void {
 		menu = {
 			h: node.offsetHeight,
 			w: node.offsetWidth
 		};
 		content = node;
+		node.querySelector('button')?.focus({ preventScroll: true });
 	}
 
 	function handleDelete() {
@@ -278,8 +296,8 @@
 {#if showMenu}
 	<div
 		bind:this={content}
-		use:getContextMenuDimension
 		use:portalToBody
+		use:getContextMenuDimension
 		style="position: fixed; top: {pos.y}px; left: {pos.x}px; z-index: 1000;"
 		class="scale-100 transform opacity-100 transition-all duration-100"
 	>
@@ -391,14 +409,38 @@
 	</div>
 {/if}
 
-<svelte:window on:click={onPageClick} />
+<svelte:window on:click={onPageClick} on:keydown={onPageKeydown} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="mt-4 ml-4 flex w-full min-w-0 flex-col md:mt-5 md:ml-0" oncontextmenu={rightClickContextMenu}>
-	{#if track?.image || playlist?.image || album?.image || artist?.image}
-		{#await OPFS.getImageUrl((track?.image || playlist?.image || album?.image || artist?.image) as string)}
+{#snippet cover(src: string)}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<img
+		onclick={handleTrackClick}
+		{src}
+		class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:aspect-square md:h-auto md:w-full md:max-w-60 lg:max-w-64"
+		alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
+			'' ||
+			album?.artist ||
+			''}"
+		draggable="false"
+	/>
+{/snippet}
+
+<div
+	bind:this={card}
+	class="track-card focus-none mt-4 ml-4 flex w-full min-w-0 flex-col md:mt-5 md:ml-0"
+	role="button"
+	tabindex="0"
+	onkeydown={handleCardKeydown}
+	oncontextmenu={rightClickContextMenu}
+>
+	{#if cachedImageUrl}
+		{@render cover(cachedImageUrl)}
+	{:else if imagePath}
+		{#await OPFS.getImageUrl(imagePath)}
 			<Lazy height={200} keep={true}>
 				{#if type === 'artist' && USE_ARTIST_SVG}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<svg
 						onclick={handleTrackClick}
@@ -428,22 +470,12 @@
 			</Lazy>
 		{:then imageUrl}
 			<Lazy height={200} keep={true}>
-				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<img
-					onclick={handleTrackClick}
-					src={imageUrl}
-					class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:aspect-square md:h-auto md:w-full md:max-w-60 lg:max-w-64"
-					alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
-						'' ||
-						album?.artist ||
-						''}"
-					draggable="false"
-				/>
+				{@render cover(imageUrl)}
 			</Lazy>
 		{:catch}
 			<Lazy height={200} keep={true}>
 				{#if type === 'artist' && USE_ARTIST_SVG}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<svg
 						onclick={handleTrackClick}
@@ -472,6 +504,7 @@
 			</Lazy>
 		{/await}
 	{:else if type === 'artist' && USE_ARTIST_SVG}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<svg
 			onclick={handleTrackClick}
@@ -559,6 +592,10 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		width: 100%;
+	}
+
+	.track-card:focus-visible :is(img, svg) {
+		animation: var(--m3-util-refocus);
 	}
 
 	@media (min-width: 768px) {

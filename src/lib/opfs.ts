@@ -167,6 +167,10 @@ export class OPFS {
 		return exists;
 	}
 
+	public static cachedImageUrl(path: string) {
+		return this.imageUrlCache.get(path);
+	}
+
 	public static async getImageUrl(path: string) {
 		const cached = this.imageUrlCache.get(path);
 		if (cached) return cached;

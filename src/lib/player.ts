@@ -418,6 +418,14 @@ export function seekTo(time: number) {
 	});
 }
 
+export function seekBy(direction: 1 | -1) {
+	const state = get(audioPlayer);
+	if (!(state.audio instanceof HTMLAudioElement) || !Number.isFinite(state.audio.duration)) return;
+	const step = state.audio.duration < 30 ? 5 : 15;
+	const time = state.audio.currentTime + direction * step;
+	seekTo(Math.min(Math.max(time, 0), state.audio.duration));
+}
+
 export async function playRecent(index = 0) {
 	const recent = recentlyPlayedManager.get().filter(Boolean);
 	if (!recent.length) return;

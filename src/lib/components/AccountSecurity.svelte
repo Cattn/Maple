@@ -50,7 +50,8 @@
 		if (changed) newEmail = '';
 	}
 
-	async function changePassword() {
+	async function changePassword(event: SubmitEvent) {
+		event.preventDefault();
 		const changed = await run(
 			async () =>
 				(
@@ -126,7 +127,8 @@
 				{#if emailIssue}<p class="text-error text-xs">{emailIssue}</p>{/if}
 			</div>
 
-			<div
+			<form
+				onsubmit={changePassword}
 				class="bg-surface-container-high ring-outline/50 flex flex-col gap-3 rounded-xl p-4 ring-1"
 			>
 				<p class="text-on-surface text-xs font-semibold tracking-wide uppercase">Password</p>
@@ -154,12 +156,12 @@
 					</label>
 					<Button
 						variant="outlined"
-						onclick={changePassword}
+						type="submit"
 						disabled={busy || !currentPassword || !newPassword || !!passwordIssue}
 						>Change password</Button
 					>
 				</div>
-			</div>
+			</form>
 
 			<div
 				class="bg-surface-container-high ring-outline/50 flex flex-col gap-3 rounded-xl p-4 ring-1"

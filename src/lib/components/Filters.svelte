@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ConnectedButtons, Button, FAB } from 'm3-svelte';
 	import iconSearch from '@ktibow/iconset-material-symbols/search';
+	import { sortCache } from '$lib/store';
 
 	let {
 		items = [],
@@ -24,8 +25,9 @@
 
 	initialSortKey ??= sortOptions[0]?.key ?? '';
 
-	let sortKey = $state(initialSortKey);
-	let descending = $state(initialDescending);
+	const cached = sortCache[idPrefix];
+	let sortKey = $state(cached?.sortKey ?? initialSortKey);
+	let descending = $state(cached?.descending ?? initialDescending);
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
 	let searchInput: HTMLInputElement | undefined = $state();
@@ -46,6 +48,17 @@
 	});
 
 	let sorted = $derived.by(() => {
+		const searching = !!searchQuery.trim();
+		const hit = sortCache[idPrefix];
+		if (
+			!searching &&
+			hit &&
+			hit.items === items &&
+			hit.sortKey === sortKey &&
+			hit.descending === descending
+		) {
+			return hit.sorted;
+		}
 		const list = [...filtered];
 		list.sort((a, b) => {
 			const aVal = a[sortKey] as unknown as string | number | undefined;
@@ -58,6 +71,7 @@
 			}
 			return descending ? -cmp : cmp;
 		});
+		if (!searching) sortCache[idPrefix] = { items, sortKey, descending, sorted: list };
 		return list;
 	});
 
@@ -140,7 +154,7 @@
 		</div>
 		<div class="no-scrollbar w-full overflow-x-auto pr-4 pb-1 md:pr-0">
 			<ConnectedButtons>
-				{#each sortOptions as option}
+				{#each sortOptions as option (option.key)}
 					<input
 						id={`sort-${idPrefix}-${option.key}`}
 						type="radio"
