@@ -9,7 +9,7 @@
 	import { Button } from 'm3-svelte';
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import Filters from '$lib/components/Filters.svelte';
-	import { flip } from 'svelte/animate';
+	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
 
 	let { data }: { data: { playlistId: string } } = $props();
@@ -276,7 +276,7 @@
 				<div class="bg-surface-container rounded-xl">
 					<ul class="divide-outline-variant divide-y">
 						{#each displayedTracks as t (t.id)}
-							<li animate:flip={{ duration: 300, easing: cubicOut }}>
+							<li animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
 								<ListTrack
 									track={t}
 									index={t.playlistIndex}

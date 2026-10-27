@@ -3,7 +3,7 @@
 	import Track from '$lib/components/Track.svelte';
 	import Filters from '$lib/components/Filters.svelte';
 	import { playlists } from '$lib/global.svelte';
-	import { flip } from 'svelte/animate';
+	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -62,7 +62,7 @@
 		</div>
 	</div>
 	{#each sortedPlaylists as playlist (playlist.id)}
-		<div class="min-w-0 will-change-transform" animate:flip={{ duration: 300, easing: cubicOut }}>
+		<div class="min-w-0" animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
 			<Track {playlist} type="playlist" />
 		</div>
 	{/each}
