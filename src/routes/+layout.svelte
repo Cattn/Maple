@@ -5,7 +5,8 @@
 	import BottomBar from '$lib/components/BottomBar.svelte';
 	import MobileNowPlaying from '$lib/components/MobileNowPlaying.svelte';
 	import MobileBottomNav from '$lib/components/MobileBottomNav.svelte';
-	import { title, loadPreferencesStore, appUpdateReady } from '$lib/store';
+	import { title, loadPreferencesStore, appUpdateReady, activeSong } from '$lib/store';
+	import { seekBy, togglePlay } from '$lib/player';
 	import { loadSession } from '$lib/api/auth';
 	import { onMount } from 'svelte';
 	import { Snackbar } from 'm3-svelte';
@@ -46,6 +47,19 @@
 			storage.setItem(routeKey, currentPath);
 		}
 		return appLaunch ? currentPath : null;
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.ctrlKey || e.metaKey || e.altKey || !$activeSong.id) return;
+		const target = e.target as HTMLElement;
+		if (target.isContentEditable || target.closest('input, textarea, select')) return;
+		if (e.key === ' ') {
+			e.preventDefault();
+			if (!e.repeat) togglePlay();
+		} else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+			e.preventDefault();
+			seekBy(e.key === 'ArrowRight' ? 1 : -1);
+		}
 	}
 
 	afterNavigate(() => {
@@ -133,6 +147,8 @@
 <PasskeyPrompt />
 
 <Toaster position="bottom-right" />
+
+<svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
 	<link rel="manifest" href={`${base}/${dev ? 'manifest.json' : 'manifest.webmanifest'}`} />
