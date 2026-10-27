@@ -240,7 +240,7 @@
 		onclick={onRowClick}
 		role="button"
 		tabindex="0"
-		onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onRowClick()}
+		onkeydown={(e) => e.key === 'Enter' && onRowClick()}
 		ontouchstart={onTouchStart}
 		ontouchend={onTouchEnd}
 		ontouchcancel={onTouchEnd}
