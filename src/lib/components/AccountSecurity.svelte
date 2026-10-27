@@ -114,10 +114,11 @@
 						autocomplete="email"
 						bind:value={newEmail}
 						placeholder="New email address"
-						class={inputClass}
+						class={`${inputClass} min-w-0 sm:flex-1`}
 					/>
 					<Button
 						variant="outlined"
+						style="flex-shrink: 0; white-space: nowrap;"
 						onclick={changeEmail}
 						disabled={busy || !newEmail || !!emailIssue}>Change email</Button
 					>
