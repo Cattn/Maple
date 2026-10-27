@@ -8,7 +8,7 @@
 	import { onMount } from 'svelte';
 	import { title } from '$lib/store';
 
-	let sortedAlbums: Album[] = $state(albums());
+	let sortedAlbums: Album[] = $state([]);
 
 	function handleFiltersChange(payload: { sorted: Album[]; sortKey: string; descending: boolean }) {
 		sortedAlbums = payload.sorted;

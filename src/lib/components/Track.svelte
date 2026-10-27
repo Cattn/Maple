@@ -43,6 +43,11 @@
 
 	const USE_ARTIST_SVG = true;
 
+	let imagePath = $derived(
+		(track?.image || playlist?.image || album?.image || artist?.image) as string | undefined
+	);
+	let cachedImageUrl = $derived(imagePath && OPFS.cachedImageUrl(imagePath));
+
 	function portalToBody(node: HTMLElement) {
 		if (typeof document !== 'undefined' && node.parentNode !== document.body) {
 			document.body.appendChild(node);
@@ -393,10 +398,27 @@
 
 <svelte:window on:click={onPageClick} />
 
+{#snippet cover(src: string)}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<img
+		onclick={handleTrackClick}
+		{src}
+		class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:aspect-square md:h-auto md:w-full md:max-w-60 lg:max-w-64"
+		alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
+			'' ||
+			album?.artist ||
+			''}"
+		draggable="false"
+	/>
+{/snippet}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="mt-4 ml-4 flex w-full min-w-0 flex-col md:mt-5 md:ml-0" oncontextmenu={rightClickContextMenu}>
-	{#if track?.image || playlist?.image || album?.image || artist?.image}
-		{#await OPFS.getImageUrl((track?.image || playlist?.image || album?.image || artist?.image) as string)}
+	{#if cachedImageUrl}
+		{@render cover(cachedImageUrl)}
+	{:else if imagePath}
+		{#await OPFS.getImageUrl(imagePath)}
 			<Lazy height={200} keep={true}>
 				{#if type === 'artist' && USE_ARTIST_SVG}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -428,18 +450,7 @@
 			</Lazy>
 		{:then imageUrl}
 			<Lazy height={200} keep={true}>
-				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<img
-					onclick={handleTrackClick}
-					src={imageUrl}
-					class="h-44 w-44 cursor-pointer rounded-lg object-cover transition-all duration-300 ease-in-out select-none hover:scale-102 hover:shadow-lg active:scale-98 md:aspect-square md:h-auto md:w-full md:max-w-60 lg:max-w-64"
-					alt="{track?.title || playlist?.name || album?.name || artist?.name} - {track?.artist ||
-						'' ||
-						album?.artist ||
-						''}"
-					draggable="false"
-				/>
+				{@render cover(imageUrl)}
 			</Lazy>
 		{:catch}
 			<Lazy height={200} keep={true}>

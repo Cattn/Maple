@@ -2,21 +2,20 @@
 	import type { Song } from '$lib/types';
 	import Track from '$lib/components/Track.svelte';
 	import Filters from '$lib/components/Filters.svelte';
-	import { refreshLibrary, tracks } from '$lib/global.svelte';
+	import { tracks } from '$lib/global.svelte';
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
 	import { title } from '$lib/store';
 	import { onMount } from 'svelte';
 
-	let sortedTracks: Song[] = $state(tracks());
+	let sortedTracks: Song[] = $state([]);
 
 	function handleFiltersChange(payload: { sorted: Song[]; sortKey: string; descending: boolean }) {
 		sortedTracks = payload.sorted;
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		title.set('Tracks');
-		await refreshLibrary();
 	});
 </script>
 

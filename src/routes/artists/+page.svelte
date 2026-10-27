@@ -8,7 +8,7 @@
 	import { onMount } from 'svelte';
 	import { title } from '$lib/store';
 
-	let sortedArtists: Artist[] = $state(artists());
+	let sortedArtists: Artist[] = $state([]);
 
 	function handleFiltersChange(payload: {
 		sorted: Artist[];

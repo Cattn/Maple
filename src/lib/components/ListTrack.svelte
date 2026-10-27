@@ -40,6 +40,8 @@
 		playbackSource?: { type?: QueueSource; id?: string; label?: string };
 	} = $props();
 
+	let cachedImageUrl = $derived(track.image && OPFS.cachedImageUrl(track.image as string));
+
 	let showMenu = $state(false);
 	let showPlaylistSubmenu = $state(false);
 	let content: HTMLDivElement | undefined = $state(undefined);
@@ -217,6 +219,17 @@
 
 <svelte:window onclick={onPageClick} />
 
+{#snippet thumbnail(src: string)}
+	<div class="h-10 w-10 shrink-0">
+		<img
+			{src}
+			alt="{track.title} - {track.artist}"
+			class="h-full w-full rounded-md object-cover"
+			draggable="false"
+		/>
+	</div>
+{/snippet}
+
 <div class="relative" oncontextmenu={(e) => e.preventDefault()} role="presentation">
 	{#if showDropIndicator}
 		<div class="bg-primary/70 absolute top-0 right-0 left-0 h-0.5"></div>
@@ -242,17 +255,12 @@
 				>{index}</span
 			>
 			{#if showThumbnail}
-				{#if track.image}
+				{#if cachedImageUrl}
+					{@render thumbnail(cachedImageUrl)}
+				{:else if track.image}
 					{#await OPFS.getImageUrl(track.image as string) then imageUrl}
 						<Lazy height={40} keep={true}>
-							<div class="h-10 w-10 shrink-0">
-								<img
-									src={imageUrl}
-									alt="{track.title} - {track.artist}"
-									class="h-full w-full rounded-md object-cover"
-									draggable="false"
-								/>
-							</div>
+							{@render thumbnail(imageUrl)}
 						</Lazy>
 					{:catch}
 						<Lazy height={40} keep={true}>

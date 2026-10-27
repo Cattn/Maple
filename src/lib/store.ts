@@ -31,6 +31,10 @@ if (browser) {
 export const socket = writable<MapleSocket | null>(null);
 //export const UserPeer = writable(null as Peer | null);
 export const searchType = writable('tracks');
+export const sortCache: Record<
+	string,
+	{ items: unknown[]; sortKey: string; descending: boolean; sorted: unknown[] }
+> = {};
 export const SavedUser = writable<User | null>(null);
 export let accountRevision = 0;
 

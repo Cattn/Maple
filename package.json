@@ -45,7 +45,7 @@
 		"express": "^5.1.0",
 		"m3-svelte": "^4.6.2",
 		"music-metadata": "^11.16.1",
-		"opfs-tools": "^0.7.2",
+		"opfs-tools": "^0.7.5",
 		"peerjs": "^1.5.5",
 		"socket.io-client": "^4.8.1",
 		"svelte-awesome-color-picker": "^4.1.0",
