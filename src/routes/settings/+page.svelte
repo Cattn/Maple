@@ -1,25 +1,27 @@
 <script lang="ts">
 	import { Card, Button, Dialog } from 'm3-svelte';
 	import ColorPicker from 'svelte-awesome-color-picker';
-	import { isLoggedIn, UserInfo, SavedUser, socket, appInstallPrompt, appInstalled, appUpdateReady } from '$lib/store';
+	import { isLoggedIn, SavedUser, appInstallPrompt, appInstalled, appUpdateReady } from '$lib/store';
 	import { version, dev } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
+	import { toast } from 'svelte-sonner';
 	import { title } from '$lib/store';
 	import { themeSettings, setThemeSettings, persistThemeSettings } from '$lib/theme/theme';
 	import { UserManager } from '$lib/api/UserManager';
+	import { loadSession } from '$lib/api/auth';
 	import UserSettings from '$lib/preferences/usersettings';
 	import { Settings } from '$lib/preferences/fetch';
-	import { io } from 'socket.io-client';
-	import { SERVER } from '$lib/api/server';
-	import { socketManager } from '$lib/socketManager';
-	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
+	import { syncSocket } from '$lib/socketManager';
+	import AccountSecurity from '$lib/components/AccountSecurity.svelte';
 	import { OPFS } from '$lib/opfs';
 	import { createLibrary } from '$lib/library';
 	import { refreshLibrary } from '$lib/global.svelte';
 
 	let name = $state('');
 	let initialName = $state('');
+	let listeningPublic = $state(true);
+	let initialListeningPublic = $state(true);
 	let appWindow = $state(false);
 	let installingApp = $state(false);
 	let reloadingApp = $state(false);
@@ -103,6 +105,8 @@
 	$effect(() => {
 		name = $SavedUser?.name ?? '';
 		initialName = $SavedUser?.name ?? '';
+		listeningPublic = $SavedUser?.listeningVisibility !== 'private';
+		initialListeningPublic = listeningPublic;
 	});
 
 	$effect(() => {
@@ -145,6 +149,7 @@
 
 	let hasChanges = $derived(
 		name !== initialName ||
+			listeningPublic !== initialListeningPublic ||
 			webhookEnabled !== initialWebhookEnabled ||
 			webhookUrl !== initialWebhookUrl ||
 			discordRpcEnabled !== initialDiscordRpcEnabled ||
@@ -159,11 +164,14 @@
 	);
 
 	const saveChanges = async () => {
+		const profileChanged =
+			pfpFile !== null || name !== initialName || listeningPublic !== initialListeningPublic;
 		if (pfpFile) {
 			pfpUploading = true;
 			const result = await UserManager.updateProfilePicture(pfpFile);
 			pfpUploading = false;
-			if (result.error) {
+			if ('error' in result) {
+				toast.error(result.error);
 				return;
 			}
 			pfpFile = null;
@@ -172,17 +180,28 @@
 
 		if (name !== initialName) {
 			const result = await UserManager.updateDisplayName(name);
-			if (result.error) {
+			if ('error' in result) {
+				toast.error(result.error);
 				return;
 			}
 			initialName = name;
 		}
 
+		if (listeningPublic !== initialListeningPublic) {
+			const result = await UserManager.setListeningVisibility(listeningPublic ? 'public' : 'private');
+			if ('error' in result) {
+				toast.error(result.error);
+				return;
+			}
+			initialListeningPublic = listeningPublic;
+		}
+
+		if (profileChanged) await loadSession();
+
 		if (socketCommunicationEnabled !== initialSocketCommunicationEnabled) {
 			preferencesSettings.set('socket', socketCommunicationEnabled);
 			UserSettings.preferences.socket = socketCommunicationEnabled;
 
-			const currentSocket = get(socket);
 			const isLoggedInValue = get(isLoggedIn);
 
 			if (socketCommunicationEnabled) {
@@ -191,25 +210,8 @@
 					initialSocketCommunicationEnabled = false;
 					return;
 				}
-				if (!currentSocket || !currentSocket.connected) {
-					const io2 = io(`${SERVER}`, {
-						withCredentials: true
-					});
-					socket.set(io2);
-					const newSocket = get(socket);
-					newSocket?.on('connect', () => {
-						console.log('Connected to server');
-					});
-					socketManager();
-					refreshFriends();
-					refreshRequests();
-				}
-			} else {
-				if (currentSocket) {
-					currentSocket.disconnect();
-					socket.set(null);
-				}
 			}
+			syncSocket();
 			initialSocketCommunicationEnabled = socketCommunicationEnabled;
 		}
 
@@ -343,7 +345,7 @@
 						<div class="flex flex-1 flex-col gap-4">
 							<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 								<div class="flex items-center gap-3">
-									<h2 class="text-2xl font-bold">{$UserInfo?.username ?? 'Guest'}</h2>
+									<h2 class="text-2xl font-bold">{$SavedUser?.username ?? 'Guest'}</h2>
 									<span
 										class={`rounded-full px-3 py-1 text-xs font-semibold ${$isLoggedIn ? 'bg-primary/15 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}
 									>
@@ -373,7 +375,7 @@
 										Username
 									</p>
 									<p class="text-on-surface text-lg font-semibold">
-										{$UserInfo?.username ?? 'Not set'}
+										{$SavedUser?.username ?? 'Not set'}
 									</p>
 								</div>
 								<div
@@ -383,7 +385,7 @@
 										Account ID
 									</p>
 									<p class="text-on-surface text-lg font-semibold">
-										{$UserInfo?.id ?? 'Not available'}
+										{$SavedUser?.id ?? 'Not available'}
 									</p>
 								</div>
 							</div>
@@ -391,6 +393,10 @@
 					</div>
 				</Card>
 			</section>
+
+			{#if $isLoggedIn}
+				<AccountSecurity />
+			{/if}
 
 			<section class="flex flex-col gap-3">
 				<div class="flex items-center justify-between">
@@ -522,6 +528,36 @@
 								</label>
 							</div>
 						</div>
+
+						{#if $isLoggedIn}
+							<div
+								class="bg-surface-container-high ring-outline/50 flex flex-col gap-3 rounded-xl p-4 ring-1"
+							>
+								<div class="flex flex-col gap-1">
+									<p class="text-on-surface text-xs font-semibold tracking-wide uppercase">
+										Listening Activity
+									</p>
+								</div>
+								<div class="flex items-start justify-between gap-4">
+									<div class="flex flex-col gap-1">
+										<p class="text-on-surface-variant text-sm font-semibold">Public listening</p>
+										<p class="text-on-surface-variant text-xs">
+											Let friends see what you're playing and what you played last. Turn off to keep
+											it private.
+										</p>
+									</div>
+									<label class="relative inline-flex h-6 w-11 cursor-pointer items-center">
+										<input type="checkbox" class="peer sr-only" bind:checked={listeningPublic} />
+										<div
+											class="bg-outline-variant peer-checked:bg-primary/90 h-6 w-11 rounded-full transition"
+										></div>
+										<span
+											class="bg-surface absolute top-0.5 left-0.5 h-5 w-5 rounded-full shadow-sm transition peer-checked:translate-x-5"
+										></span>
+									</label>
+								</div>
+							</div>
+						{/if}
 					</div>
 				</Card>
 			</section>

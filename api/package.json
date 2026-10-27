@@ -2,13 +2,21 @@
 	"name": "maple-api",
 	"version": "1.0.0",
 	"description": "The API for Maple Auth/Server Functions",
-	"main": "maple.js",
+	"type": "module",
+	"main": "dist/maple.js",
 	"scripts": {
-		"start": "node maple.js",
-		"dev": "node maple.dev.js",
-		"test": "echo \"Error: no test specified\" && exit 1",
-		"db:init": "node scripts/init-sqlite.js",
-		"db:migrate:mysql": "node scripts/migrate-mysql.js"
+		"build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"fs.cpSync('storage/schema.sql','dist/storage/schema.sql')\"",
+		"start": "node dist/maple.js",
+		"peer": "node dist/scripts/peer-server.js",
+		"dev": "tsx watch maple.ts --dev",
+		"preview": "tsx scripts/preview.ts",
+		"typecheck": "tsc -p tsconfig.json",
+		"lint": "eslint .",
+		"test": "node --import tsx --test --test-force-exit \"tests/*.test.ts\"",
+		"db:init": "node dist/scripts/init-sqlite.js",
+		"db:migrate:mysql": "node dist/scripts/migrate-mysql.js",
+		"db:preflight": "node dist/scripts/preflight-sqlite.js",
+		"db:upgrade": "node dist/scripts/upgrade-sqlite.js"
 	},
 	"repository": {
 		"type": "git",
@@ -24,7 +32,10 @@
 	},
 	"homepage": "https://github.com/Cattn/Maple#readme",
 	"dependencies": {
+		"@better-auth/kysely-adapter": "1.7.13",
+		"@better-auth/passkey": "1.7.13",
 		"bcrypt": "^6.0.0",
+		"better-auth": "1.7.13",
 		"cookie-parser": "^1.4.7",
 		"cors": "^2.8.5",
 		"dotenv": "^16.4.7",
@@ -32,17 +43,24 @@
 		"express-rate-limit": "^7.5.0",
 		"express-slow-down": "^3.0.1",
 		"express-validator": "^7.2.1",
-		"jsonwebtoken": "^9.0.2",
 		"multer": "^2.5.0",
 		"peer": "^1.0.2",
 		"socket.io": "^4.8.1",
-		"uuid": "^11.1.1",
-		"validator": "^13.15.23"
+		"zod": "4.6.7"
 	},
 	"engines": {
 		"node": ">=22.13.0"
 	},
 	"devDependencies": {
-		"mysql2": "^3.24.6"
+		"@types/bcrypt": "^6.0.0",
+		"@types/cookie-parser": "^1.4.10",
+		"@types/cors": "^2.8.19",
+		"@types/express": "^4.17.25",
+		"@types/multer": "^2.3.0",
+		"@types/node": "^22.20.5",
+		"mysql2": "^3.24.6",
+		"socket.io-client": "^4.8.4",
+		"tsx": "^4.23.15",
+		"typescript": "^5.9.3"
 	}
 }

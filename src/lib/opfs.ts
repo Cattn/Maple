@@ -106,7 +106,9 @@ export class OPFS {
 			paths.map((p) =>
 				dir(p)
 					.exists()
-					.then((exists) => (exists ? Promise.resolve() : dir(p).create()))
+					.then(async (exists) => {
+						if (!exists) await dir(p).create();
+					})
 			)
 		);
 
@@ -170,6 +172,8 @@ export class OPFS {
 		if (cached) return cached;
 		const response = await OPFS.get().image(path);
 		const arrayBuffer = await response.arrayBuffer();
+		const existing = this.imageUrlCache.get(path);
+		if (existing) return existing;
 		const blob = new Blob([arrayBuffer]);
 		const url = URL.createObjectURL(blob);
 		this.imageUrlCache.set(path, url);

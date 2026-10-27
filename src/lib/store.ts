@@ -1,16 +1,15 @@
 import { browser } from '$app/environment';
 //import { Peer } from 'peerjs';
-import { Socket } from 'socket.io-client';
 import { derived, get, writable } from 'svelte/store';
-import type { AddedFriend, PendingRequest, Song, User } from '$lib/types';
+import type { Friend, FriendRequests, MapleSocket, Song, User } from '$lib/types';
 import { normalizeStats, stats, statsManager } from './stats';
 export { stats, statsManager };
 import { OPFS } from '$lib/opfs';
 
 export type QueueSource = 'none' | 'album' | 'playlist' | 'artist' | 'tracks' | 'recent' | 'custom';
 
-export const pendingRequests = writable([] as PendingRequest[]);
-export const friends = writable([] as AddedFriend[]);
+export const pendingRequests = writable<FriendRequests>({ incoming: [], outgoing: [] });
+export const friends = writable<Friend[]>([]);
 export const isLoggedIn = writable(false);
 export type AppInstallPromptEvent = Event & {
 	prompt(): Promise<void>;
@@ -29,19 +28,19 @@ if (browser) {
 		appInstalled.set(true);
 	});
 }
-export const friendNowPlaying = writable({} as Record<string, unknown>);
-export const socket = writable(null as Socket | null);
+export const socket = writable<MapleSocket | null>(null);
 //export const UserPeer = writable(null as Peer | null);
 export const searchType = writable('tracks');
-export const UserInfo = writable(null as User | null);
-UserInfo.subscribe((value) => {
-	if (browser) {
-		if (!value) return;
-		if (value === undefined) return;
-		localStorage.setItem('UserInfo', JSON.stringify(value));
-	}
-});
-export const SavedUser = writable({} as User);
+export const SavedUser = writable<User | null>(null);
+export let accountRevision = 0;
+
+export function clearAccount() {
+	accountRevision++;
+	isLoggedIn.set(false);
+	SavedUser.set(null);
+	friends.set([]);
+	pendingRequests.set({ incoming: [], outgoing: [] });
+}
 export const activeSong = writable({} as Song);
 export const context = writable([] as Song[]);
 export type QueueSnapshot = {
@@ -104,8 +103,9 @@ export const recentlyPlayedManager = {
 	},
 	load: () => {
 		if (!browser) return;
-		const stored = JSON.parse(localStorage.getItem('recentlyPlayed') || '[]');
-		recentlyPlayed.set(stored);
+		const stored = localStorage.getItem('recentlyPlayed') || '[]';
+		if (stored === JSON.stringify(get(recentlyPlayed))) return;
+		recentlyPlayed.set(JSON.parse(stored));
 	},
 	clear: () => {
 		if (browser) localStorage.removeItem('recentlyPlayed');
@@ -264,10 +264,7 @@ if (browser) {
 		hideTips.set(false);
 	}
 
-	const storedUserInfo = localStorage.getItem('UserInfo');
-	if (storedUserInfo) {
-		UserInfo.set(JSON.parse(storedUserInfo));
-	}
+	localStorage.removeItem('UserInfo');
 
 	recentlyPlayedManager.load();
 }

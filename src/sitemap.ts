@@ -16,8 +16,10 @@ export const sitemap = (<const>{
    "/playlists/playlist/[slug]": false,
    "/playlists/playlist": true,
    "/register": false,
+   "/reset-password": false,
    "/settings": false,
-   "/tracks": false
+   "/tracks": false,
+   "/verified": false
 }) satisfies RO_Sitemap
 
 export type Sitemap = typeof sitemap

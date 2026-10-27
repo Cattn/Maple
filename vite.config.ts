@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
 	const isDevelopment = mode === 'development';
 	return {
 		resolve: {
-			dedupe: ['svelte']
+			dedupe: ['svelte', 'zod']
 		},
 		plugins: [
 			sveltekit(),
@@ -27,11 +27,15 @@ export default defineConfig(({ mode }) => {
 						globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,gif,webp,woff,woff2,ttf,eot}'],
 						runtimeCaching: [
 							{
-								urlPattern: /^https:\/\/play\.maple\.music\/.*/i,
+								urlPattern: ({ request, url }) =>
+									request.mode === 'navigate' &&
+									url.origin === self.location.origin &&
+									!url.searchParams.has('token'),
 								handler: 'NetworkFirst',
 								options: {
 									cacheName: 'api-cache',
 									networkTimeoutSeconds: 10,
+									matchOptions: { ignoreSearch: true },
 									cacheableResponse: { statuses: [0, 200] }
 								}
 							}
