@@ -62,6 +62,29 @@ Request Example:
 
 ```js
 const response = await fetch(`${this.SERVER}/public/get/user/${username}`, {
+	method: 'GET'
+});
+const data = await response.json();
+```
+
+Response:
+
+```
+{
+    id: id,
+    username: username,
+    name: name | null
+}
+```
+
+### `GET` - `/public/get/user/id/:id`
+
+Returns a user based on the given id. `listening` is only included if the user's listening activity is public, or if you are logged in as that user.
+
+Request Example:
+
+```js
+const response = await fetch(`${this.SERVER}/public/get/user/id/${id}`, {
 	credentials: 'include',
 	method: 'GET'
 });
@@ -74,35 +97,27 @@ Response:
 {
     id: id,
     username: username,
-    name?: name,
-}
-```
-
-### `GET` - `/public/get/user/id/:id`
-
-Returns a user based on the given id.
-
-Request Example:
-
-```js
-const response = await fetch(`${this.SERVER}/public/get/user/id/${id}`, {
-	method: 'GET'
-});
-const data = await response.json();
-```
-
-Response:
-
-```
-{
-    id: id,
-    username: username,
-    name?: name,
-    nowPlaying?: {
-        title: title,
-        artist: artist,
-        album: album
-    }
+    name: name | null,
+    listening: {
+        current: {
+            title: title,
+            artist: artist,
+            album: album,
+            duration: duration | null,
+            playing: playing,
+            position: position,
+            playbackRate: playbackRate,
+            artwork: artwork | null
+        } | null,
+        lastPlayed: {
+            title: title,
+            artist: artist,
+            album: album,
+            duration: duration | null,
+            playedAt: playedAt | null,
+            artwork: artwork | null
+        } | null
+    } | null
 }
 ```
 
@@ -125,37 +140,25 @@ Response:
 File Object
 ```
 
-### `POST` - `/user/friends/add/:id`
+### `GET` - `/public/get/albumArt/:id/:artwork`
 
-Add a given user to your friends list by ID.
-
-REQUIRED: `Login Token`\*
+Returns the album art of the song a user is currently playing, based on the given id. `artwork` should be the `artwork` value from that user's `listening` data. Only available if the user's listening activity is public, or if you are logged in as that user.
 
 Request Example:
 
 ```js
-const response = await fetch(`${this.SERVER}/user/friends/add/${id}`, {
+const response = await fetch(`${this.SERVER}/public/get/albumArt/${id}/${artwork}`, {
 	credentials: 'include',
-	method: 'POST'
+	method: 'GET'
 });
-const data = await response.json();
+const data = await response;
 ```
 
-Response: `200`
+Response:
 
 ```
-{ message: 'Request sent successfully' }
+File Object
 ```
-
-Response: `500`
-
-```
-{ error: 'Error adding friend' }
-```
-
-### \* How do I get login token?
-
-> Typically you can only get a login token by logging in on our site, however if you extract this cookie you can use it from another site to login.
 
 ## What's the inspiration behind it?
 
