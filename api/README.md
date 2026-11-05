@@ -19,7 +19,19 @@ npm ci
 cp .env.example .env
 ```
 
-Edit `.env` to set a private `TOKEN_SECRET` and the desired `SQLITE_PATH`, then:
+Generate a private `BETTER_AUTH_SECRET` (works in PowerShell and Unix shells):
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Copy the output into `api/.env`:
+
+```dotenv
+BETTER_AUTH_SECRET=paste-generated-value-here
+```
+
+Keep this value private and reuse it across restarts. Set the desired `SQLITE_PATH`, then:
 
 ```sh
 npm run db:init
@@ -77,7 +89,7 @@ npm ci --include=dev
 startup never imports it. Production can use `npm ci --omit=dev` after migration.
 
 Add migration settings to `api/.env`, using `.env.example` as a reference. Keep
-your existing `TOKEN_SECRET`. Configure `MYSQL_HOST`, `MYSQL_PORT`,
+your existing `BETTER_AUTH_SECRET`. Configure `MYSQL_HOST`, `MYSQL_PORT`,
 `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD` locally. Use an account with
 **SELECT-only access** to `maple_auth.*`; have your database administrator provision
 it separately if needed. Do not pass passwords as command-line arguments.
@@ -109,7 +121,7 @@ Subsequent MySQL writes are not copied into the rehearsal snapshot automatically
 
 3. Check the successful integrity report and row counts. Set `SQLITE_PATH` in
    `api/.env` or the service environment to that exact absolute filename. Keep
-   `TOKEN_SECRET` unchanged to preserve existing signed login cookies.
+   `BETTER_AUTH_SECRET` unchanged across restarts.
 4. Ensure the API service user owns the database and can write to its parent
    directory. New files use mode `0600`; adjust ownership yourself if the migration
    ran as a different user.
