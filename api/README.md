@@ -31,7 +31,8 @@ npm run dev -- --port 5173 --strictPort
 ```
 
 Open **http://localhost:5173**. The API runs at **http://localhost:3000**.
-Register a test account and open the verification link printed in the API terminal.
+Sign in with username `guest` and password `guest` for a verified test account.
+To test registration, create another account and open the verification link printed in the API terminal.
 Password reset emails also print there. To test legacy enrollment, sign in with
 username `legacy` and password `LegacyPreview1`, then follow the enrollment flow.
 

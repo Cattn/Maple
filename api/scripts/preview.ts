@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { createMaple } from '../app.js';
 import type { SendEmail } from '../auth/email.js';
+import { password } from '../auth/password.js';
 import { loadConfig } from '../config.js';
 import { createFile } from '../storage/create-file.js';
 import { openDatabase, type Database } from '../storage/sqlite.js';
@@ -13,6 +14,7 @@ import { openDatabase, type Database } from '../storage/sqlite.js';
 const prefix = 'maple-preview-';
 const host = '127.0.0.1';
 const port = 3000;
+const guest = { username: 'guest', password: 'guest', email: 'guest@example.test' };
 const legacy = { username: 'legacy', password: 'LegacyPreview1' };
 
 const printEmail: SendEmail = async ({ to, subject, text }) => {
@@ -82,6 +84,19 @@ async function main() {
 			true
 		);
 		db = openDatabase(config.databasePath);
+		const guestHash = await password.hash(guest.password);
+		db.transaction((transaction) => {
+			const id = randomUUID();
+			const now = new Date().toISOString();
+			transaction.run(
+				'INSERT INTO auth_user (id, name, email, emailVerified, createdAt, updatedAt, username, displayUsername) VALUES (?, ?, ?, 1, ?, ?, ?, ?)',
+				[id, guest.username, guest.email, now, now, guest.username, guest.username]
+			);
+			transaction.run(
+				'INSERT INTO auth_account (id, accountId, providerId, userId, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+				[randomUUID(), id, 'credential', id, guestHash, now, now]
+			);
+		});
 		const { server, io } = createMaple(config, db, printEmail);
 
 		let stopping = false;
@@ -105,6 +120,7 @@ async function main() {
 		server.listen(port, host, () => {
 			console.log(`[PREVIEW] Disposable API running at ${config.apiURL} for ${config.frontendURL}`);
 			console.log(`[PREVIEW] Temporary database: ${databasePath}`);
+			console.log(`[PREVIEW] Test account: ${guest.username} / ${guest.password}`);
 			console.log(`[PREVIEW] Legacy account: ${legacy.username} / ${legacy.password}`);
 			console.log('[PREVIEW] Emails are printed here, not sent. Press Ctrl+C to stop.');
 		});
