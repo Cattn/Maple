@@ -561,6 +561,7 @@ export class OPFS {
 			const playlistIndex = this.playlistsCache.findIndex((p) => p.id === playlist.id);
 
 			if (playlistIndex !== -1) {
+				if (this.playlistsCache[playlistIndex].tracks?.includes(track.id)) return;
 				if (!this.playlistsCache[playlistIndex].tracks) {
 					this.playlistsCache[playlistIndex].tracks = [];
 				}

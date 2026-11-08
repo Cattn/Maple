@@ -200,10 +200,10 @@
 </script>
 
 <div class="flex flex-col gap-8 pt-4 pr-3 pl-3 md:flex-row md:pt-14 md:pr-20 md:pl-14 lg:pl-28">
-	<div class="w-full md:w-1/2 lg:w-2/5">
+	<div class="w-full md:w-1/3 md:shrink-0">
 		{#if playlist?.image}
 			{#await OPFS.getImageUrl(playlist.image as string) then imageUrl}
-				<div class="aspect-square max-w-sm w-full">
+				<div class="aspect-square w-full">
 					<img
 						src={imageUrl}
 						alt={playlist?.name}
@@ -211,10 +211,10 @@
 					/>
 				</div>
 			{:catch}
-				<div class="bg-surface-container aspect-square max-w-sm w-full rounded-lg"></div>
+				<div class="bg-surface-container aspect-square w-full rounded-lg"></div>
 			{/await}
 		{:else}
-			<div class="bg-surface-container aspect-square max-w-sm w-full rounded-lg"></div>
+			<div class="bg-surface-container aspect-square w-full rounded-lg"></div>
 		{/if}
 		{#if editModeOn}
 			<div class="mt-4 space-y-2">
@@ -254,7 +254,7 @@
 		</div>
 	</div>
 
-	<div class="space-y-6 md:flex-1">
+	<div class="space-y-6 md:min-w-0 md:flex-1">
 		<div class="flex flex-col gap-6">
 			<div class="space-y-3">
 				<h2 class="text-on-surface text-lg font-semibold">Tracks</h2>
