@@ -107,6 +107,13 @@
 		dragging = false;
 	}
 
+	function showFullTextIfTruncated(event: MouseEvent) {
+		const el = event.currentTarget as HTMLElement;
+		const text = el.textContent?.trim() ?? '';
+		if (el.scrollWidth > el.clientWidth) el.title = text;
+		else el.removeAttribute('title');
+	}
+
 	function openQueue() {
 		queueOpen = !queueOpen;
 	}
@@ -156,10 +163,10 @@
 					class="h-14 w-14 shrink-0 rounded-lg"
 				/>
 				<div class="hidden min-w-0 flex-col lg:flex">
-					<p class="song-title truncate">
+					<p class="song-title truncate" onmouseenter={showFullTextIfTruncated}>
 						{$activeSong.title || 'Song Name'}
 					</p>
-					<p class="artist-title truncate">
+					<p class="artist-title truncate" onmouseenter={showFullTextIfTruncated}>
 						{$activeSong.artist || 'Artist Name'}
 					</p>
 				</div>
