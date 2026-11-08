@@ -111,7 +111,11 @@
 		>
 			{#each sortedAlbums as album (album.id)}
 				<div class="min-w-0" animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
-					<Track {album} type="album" />
+					<Track
+						{album}
+						type="album"
+						onDelete={() => (artistAlbums = artistAlbums.filter((a) => a.id !== album.id))}
+					/>
 				</div>
 			{/each}
 		</div>
@@ -141,6 +145,7 @@
 							{track}
 							index={i + 1}
 							trackNo={track.trackNumber}
+							onDelete={() => (artistTracks = artistTracks.filter((t) => t.id !== track.id))}
 							playbackContext={sortedTracks}
 							playbackSource={{
 								type: 'artist',

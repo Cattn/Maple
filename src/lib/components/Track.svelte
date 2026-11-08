@@ -8,7 +8,7 @@
 	import { refreshLibrary } from '$lib/global.svelte';
 	import { v4 as uuidv4 } from 'uuid';
 	import { startPlayback } from '$lib/player';
-	import type { QueueSource } from '$lib/store';
+	import { recentlyPlayedManager, type QueueSource } from '$lib/store';
 
 	const DEFAULT_PLACEHOLDER =
 		'https://raw.githubusercontent.com/Cattn/Maple/8c1ab06960d3cec36714bf99cd6cee4ebb53913a/static/temp/MapleD.svg';
@@ -31,7 +31,8 @@
 		artist,
 		type = 'track',
 		queue = [],
-		queueSource
+		queueSource,
+		onDelete
 	}: {
 		track?: Song;
 		playlist?: Playlist;
@@ -40,6 +41,7 @@
 		type?: string;
 		queue?: Song[];
 		queueSource?: { type?: QueueSource; id?: string; label?: string };
+		onDelete?: () => void;
 	} = $props();
 
 	const USE_ARTIST_SVG = true;
@@ -159,14 +161,32 @@
 		node.querySelector('button')?.focus({ preventScroll: true });
 	}
 
-	function handleDelete() {
-		console.log('Delete clicked');
+	async function handleDelete() {
 		showMenu = false;
 		showPlaylistSubmenu = false;
 		if (hideSubmenuTimeout) {
 			clearTimeout(hideSubmenuTimeout);
 			hideSubmenuTimeout = null;
 		}
+
+		const name = track?.title ?? playlist?.name ?? album?.name ?? artist?.name ?? 'this item';
+		if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+
+		if (type === 'track' && track) {
+			await OPFS.track().delete(track);
+			recentlyPlayedManager.remove(track.id);
+		} else if (type === 'playlist' && playlist) {
+			await OPFS.playlist().delete(playlist);
+		} else if (type === 'album' && album) {
+			await OPFS.album().delete(album);
+		} else if (type === 'artist' && artist) {
+			await OPFS.artist().delete(artist);
+		} else {
+			return;
+		}
+
+		await refreshLibrary();
+		onDelete?.();
 	}
 
 	async function handleDuplicate() {

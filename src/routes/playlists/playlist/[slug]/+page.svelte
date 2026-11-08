@@ -142,6 +142,7 @@
 
 	async function deletePlaylist() {
 		if (!playlist) return;
+		if (!confirm(`Delete "${playlist.name}"? This cannot be undone.`)) return;
 		await OPFS.playlist().delete(playlist);
 		await refreshLibrary();
 		goto('/playlists');
@@ -246,6 +247,7 @@
 		<div class="mt-4 flex gap-1">
 			{#if editModeOn}
 				<Button square variant="filled" onclick={saveDetails}>Save</Button>
+				<Button square variant="tonal" onclick={deletePlaylist}>Delete</Button>
 			{:else}
 				<Button variant="filled" square onclick={() => (editModeOn = true)}>Edit</Button>
 			{/if}

@@ -111,6 +111,15 @@ export const recentlyPlayedManager = {
 		if (stored === JSON.stringify(get(recentlyPlayed))) return;
 		recentlyPlayed.set(JSON.parse(stored));
 	},
+	remove: (id: string) => {
+		recentlyPlayed.update((current) => {
+			const updated = current.filter((song) => song?.id !== id);
+			if (browser) {
+				localStorage.setItem('recentlyPlayed', JSON.stringify(updated));
+			}
+			return updated;
+		});
+	},
 	clear: () => {
 		if (browser) localStorage.removeItem('recentlyPlayed');
 		recentlyPlayed.set([]);

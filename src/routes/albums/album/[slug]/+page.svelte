@@ -245,6 +245,7 @@
 									? (perDiscIndexById.get(item.track.id) ?? 0)
 									: (globalIndexById.get(item.track.id) ?? 0)}
 								trackNo={item.track.trackNumber}
+								onDelete={() => (tracks = tracks.filter((t) => t.id !== item.track.id))}
 								playbackContext={playbackOrder}
 								playbackSource={{
 									type: 'album',
