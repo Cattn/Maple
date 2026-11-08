@@ -114,7 +114,11 @@
 					<Track
 						{album}
 						type="album"
-						onDelete={() => (artistAlbums = artistAlbums.filter((a) => a.id !== album.id))}
+						onDelete={() => {
+							const removed = new Set((album.tracks ?? []) as string[]);
+							artistAlbums = artistAlbums.filter((a) => a.id !== album.id);
+							artistTracks = artistTracks.filter((t) => !removed.has(t.id));
+						}}
 					/>
 				</div>
 			{/each}

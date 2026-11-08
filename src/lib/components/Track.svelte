@@ -9,6 +9,7 @@
 	import { v4 as uuidv4 } from 'uuid';
 	import { startPlayback } from '$lib/player';
 	import { recentlyPlayedManager, type QueueSource } from '$lib/store';
+	import { confirmDialog } from '$lib/confirm.svelte';
 
 	const DEFAULT_PLACEHOLDER =
 		'https://raw.githubusercontent.com/Cattn/Maple/8c1ab06960d3cec36714bf99cd6cee4ebb53913a/static/temp/MapleD.svg';
@@ -170,21 +171,31 @@
 		}
 
 		const name = track?.title ?? playlist?.name ?? album?.name ?? artist?.name ?? 'this item';
-		if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+		const kind = { track: 'track', playlist: 'playlist', album: 'album', artist: 'artist' }[type];
+		if (!kind) return;
+		const message =
+			type === 'album' || type === 'artist'
+				? `"${name}" and all of its tracks will be permanently deleted from this device.`
+				: type === 'playlist'
+					? `"${name}" will be permanently deleted. Its tracks will stay in your library.`
+					: `"${name}" will be permanently deleted from this device.`;
+		if (!(await confirmDialog({ headline: `Delete ${kind}?`, message }))) return;
 
+		let deletedTracks: string[] = [];
 		if (type === 'track' && track) {
 			await OPFS.track().delete(track);
-			recentlyPlayedManager.remove(track.id);
+			deletedTracks = [track.id];
 		} else if (type === 'playlist' && playlist) {
 			await OPFS.playlist().delete(playlist);
 		} else if (type === 'album' && album) {
-			await OPFS.album().delete(album);
+			deletedTracks = await OPFS.album().deleteWithTracks(album);
 		} else if (type === 'artist' && artist) {
-			await OPFS.artist().delete(artist);
+			deletedTracks = await OPFS.artist().deleteWithTracks(artist);
 		} else {
 			return;
 		}
 
+		deletedTracks.forEach((id) => recentlyPlayedManager.remove(id));
 		await refreshLibrary();
 		onDelete?.();
 	}

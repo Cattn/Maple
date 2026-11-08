@@ -428,8 +428,36 @@ export class OPFS {
 				this.albumsCache.splice(index, 1);
 				await this.writeCache('/albums/albums.json', this.albumsCache);
 			}
+		},
+
+		deleteWithTracks: async (album: Album) => {
+			const current = (await this.get().album(album.id)) ?? album;
+			const deleted = await this.deleteTracksById((current.tracks ?? []) as string[]);
+			await this.album().delete(current);
+			await this.pruneEmptyCollections();
+			return deleted;
 		}
 	});
+
+	private static async deleteTracksById(ids: string[]) {
+		const deleted: string[] = [];
+		for (const id of new Set(ids)) {
+			const track = await this.get().track(id);
+			if (!track) continue;
+			await this.track().delete(track);
+			deleted.push(id);
+		}
+		return deleted;
+	}
+
+	private static async pruneEmptyCollections() {
+		for (const album of [...(await this.get().albums())]) {
+			if (!album.tracks?.length) await this.album().delete(album);
+		}
+		for (const artist of [...(await this.get().artists())]) {
+			if (!artist.tracks?.length) await this.artist().delete(artist);
+		}
+	}
 
 	public static async downloadFile(path: string) {
 		const fileArrayBuffer = await file(path).arrayBuffer();
@@ -465,6 +493,19 @@ export class OPFS {
 				this.artistsCache.splice(index, 1);
 				await this.writeCache('/artists/artists.json', this.artistsCache);
 			}
+		},
+
+		deleteWithTracks: async (artist: Artist) => {
+			const current = (await this.get().artist(artist.id)) ?? artist;
+			const allTracks: Song[] = await this.get().tracks();
+			const ids = [
+				...((current.tracks ?? []) as string[]),
+				...allTracks.filter((t) => t.artist === current.name).map((t) => t.id)
+			];
+			const deleted = await this.deleteTracksById(ids);
+			await this.artist().delete(current);
+			await this.pruneEmptyCollections();
+			return deleted;
 		}
 	});
 

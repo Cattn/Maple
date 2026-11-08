@@ -6,6 +6,7 @@
 	import { refreshLibrary, tracks } from '$lib/global.svelte';
 	import { title, shuffleEnabled } from '$lib/store';
 	import { startPlayback } from '$lib/player';
+	import { confirmDialog } from '$lib/confirm.svelte';
 	import { Button } from 'm3-svelte';
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import Filters from '$lib/components/Filters.svelte';
@@ -142,7 +143,11 @@
 
 	async function deletePlaylist() {
 		if (!playlist) return;
-		if (!confirm(`Delete "${playlist.name}"? This cannot be undone.`)) return;
+		const confirmed = await confirmDialog({
+			headline: 'Delete playlist?',
+			message: `"${playlist.name}" will be permanently deleted. Its tracks will stay in your library.`
+		});
+		if (!confirmed) return;
 		await OPFS.playlist().delete(playlist);
 		await refreshLibrary();
 		goto('/playlists');
