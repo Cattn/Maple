@@ -109,6 +109,7 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 
 			let i = 0;
 			let successCount = 0;
+			let skippedCount = 0;
 			const addedIds: string[] = [];
 			await OPFS.beginImport();
 			try {
@@ -164,10 +165,24 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 							name: metadata?.common.artist || 'Unknown Artist'
 						};
 
-						await OPFS.addAlbum(album, track.id);
-						await OPFS.addArtist(artist, track.id, track.album);
-						await OPFS.addTrack(track);
-						await OPFS.addFile(track.id, file);
+						if (await OPFS.hasTrack(track.title, track.artist)) {
+							skippedCount++;
+							continue;
+						}
+
+						try {
+							await OPFS.addFile(track.id, file);
+							if (!(await OPFS.addTrack(track))) {
+								await OPFS.discardImportedTrack(track);
+								skippedCount++;
+								continue;
+							}
+							await OPFS.addAlbum(album, track.id);
+							await OPFS.addArtist(artist, track.id, track.album);
+						} catch (error) {
+							await OPFS.discardImportedTrack(track).catch(() => {});
+							throw error;
+						}
 						addedIds.push(track.id);
 						successCount++;
 						if (successCount % IMPORT_FLUSH_EVERY === 0) {
@@ -189,9 +204,17 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 			const tracks = await OPFS.get().tracks();
 			statsManager.setLibrarySize(tracks.length);
 			OPFS.rememberLibrarySize(tracks.length);
+			const skippedNote =
+				skippedCount > 0
+					? `, ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'} skipped`
+					: '';
 			if (successCount > 0) {
-				toast.success(`Library added successfully! (${successCount} tracks)`);
+				toast.success(`Library added successfully! (${successCount} tracks${skippedNote})`);
 				await OPFS.requestPersistentStorage();
+			} else if (skippedCount > 0) {
+				toast.info(
+					`All ${skippedCount} track${skippedCount === 1 ? ' is' : 's are'} already in your library.`
+				);
 			} else {
 				toast.error('No tracks could be processed. Please try again.');
 			}
