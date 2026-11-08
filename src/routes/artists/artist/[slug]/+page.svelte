@@ -111,7 +111,15 @@
 		>
 			{#each sortedAlbums as album (album.id)}
 				<div class="min-w-0" animate:visibleFlip={{ duration: 300, easing: cubicOut }}>
-					<Track {album} type="album" />
+					<Track
+						{album}
+						type="album"
+						onDelete={() => {
+							const removed = new Set((album.tracks ?? []) as string[]);
+							artistAlbums = artistAlbums.filter((a) => a.id !== album.id);
+							artistTracks = artistTracks.filter((t) => !removed.has(t.id));
+						}}
+					/>
 				</div>
 			{/each}
 		</div>
@@ -141,6 +149,7 @@
 							{track}
 							index={i + 1}
 							trackNo={track.trackNumber}
+							onDelete={() => (artistTracks = artistTracks.filter((t) => t.id !== track.id))}
 							playbackContext={sortedTracks}
 							playbackSource={{
 								type: 'artist',

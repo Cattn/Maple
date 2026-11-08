@@ -6,7 +6,8 @@
 	import { goto } from '$app/navigation';
 	import Lazy from 'svelte-lazy';
 	import { startPlayback } from '$lib/player';
-	import type { QueueSource } from '$lib/store';
+	import { recentlyPlayedManager, type QueueSource } from '$lib/store';
+	import { confirmDialog } from '$lib/confirm.svelte';
 
 	const CONTEXT_MENU_EVENT = 'track-context-menu-open';
 
@@ -16,6 +17,7 @@
 		trackNo,
 		showThumbnail = false,
 		onRemove,
+		onDelete,
 		draggable = false,
 		onDragStart,
 		onDragOver,
@@ -30,6 +32,7 @@
 		trackNo?: number;
 		showThumbnail?: boolean;
 		onRemove?: () => void;
+		onDelete?: () => void;
 		draggable?: boolean;
 		onDragStart?: (e: DragEvent) => void;
 		onDragOver?: (e: DragEvent) => void;
@@ -132,7 +135,7 @@
 		}
 	}
 
-	function handleDelete() {
+	function closeMenu() {
 		showMenu = false;
 		showPlaylistSubmenu = false;
 		if (hideSubmenuTimeout) {
@@ -141,11 +144,25 @@
 		}
 	}
 
+	async function handleDelete() {
+		closeMenu();
+		if (!track) return;
+		const confirmed = await confirmDialog({
+			headline: 'Delete track?',
+			message: `"${track.title}" will be permanently deleted from this device.`
+		});
+		if (!confirmed) return;
+		await OPFS.track().delete(track);
+		recentlyPlayedManager.remove(track.id);
+		await refreshLibrary();
+		onDelete?.();
+	}
+
 	function handleRemove() {
 		if (onRemove) {
 			onRemove();
 		}
-		handleDelete();
+		closeMenu();
 	}
 
 	function handleAddToPlaylist(playlist?: any) {
