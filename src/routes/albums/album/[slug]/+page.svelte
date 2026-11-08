@@ -7,7 +7,8 @@
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import Filters from '$lib/components/Filters.svelte';
 	import { onMount } from 'svelte';
-	import { title } from '$lib/store';
+	import { title, shuffleEnabled } from '$lib/store';
+	import { startPlayback } from '$lib/player';
 
 	let { data }: { data: { albumId: string } } = $props();
 
@@ -183,6 +184,13 @@
 			});
 	});
 
+	function playAlbum(shuffle = false) {
+		if (!tracks.length) return;
+		if (shuffle) shuffleEnabled.set(true);
+		const start = shuffle ? tracks[Math.floor(Math.random() * tracks.length)] : tracks[0];
+		startPlayback(tracks, start, { type: 'album', id: album?.id, label: album?.name });
+	}
+
 	onMount(async () => {
 		title.set(album?.name ?? 'Album');
 	});
@@ -209,8 +217,8 @@
 		</div>
 
 		<div class="mt-4 flex justify-center gap-3 md:justify-start">
-			<Button variant="filled">Play</Button>
-			<Button variant="tonal">Shuffle</Button>
+			<Button variant="filled" onclick={() => playAlbum()}>Play</Button>
+			<Button variant="tonal" onclick={() => playAlbum(true)}>Shuffle</Button>
 		</div>
 	</div>
 
