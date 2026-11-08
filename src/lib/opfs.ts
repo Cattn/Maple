@@ -280,8 +280,43 @@ export class OPFS {
 		await write(`/tracks/${id}.${extension}`, fileContent);
 	}
 
-	public static async addTrack(track: Song) {
+	public static async hasTrack(title: string, artist: string): Promise<boolean> {
 		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
+		return this.tracksCache.some((t) => t.title === title && t.artist === artist);
+	}
+
+	public static async discardImportedTrack(track: Song): Promise<void> {
+		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
+		if (this.tracksCache.some((t) => t.id === track.id)) {
+			await this.track().delete(track);
+		} else {
+			await file(`/tracks/${track.id}.${track.ext}`)
+				.remove()
+				.catch(() => {});
+			await file(`/images/${track.id}.image`)
+				.remove()
+				.catch(() => {});
+			for (const album of await this.get().albums()) {
+				const index = album.tracks?.indexOf(track.id) ?? -1;
+				if (index === -1) continue;
+				album.tracks?.splice(index, 1);
+				await this.album().edit(album);
+			}
+			for (const artist of await this.get().artists()) {
+				const index = artist.tracks?.indexOf(track.id) ?? -1;
+				if (index === -1) continue;
+				artist.tracks?.splice(index, 1);
+				await this.artist().edit(artist);
+			}
+		}
+		await this.pruneEmptyCollections();
+	}
+
+	public static async addTrack(track: Song): Promise<boolean> {
+		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
+		if (this.tracksCache.some((t) => t.title === track.title && t.artist === track.artist)) {
+			return false;
+		}
 
 		const imageFileName = `${track.id}.image`;
 		const imageArrayBuffer =
@@ -291,10 +326,9 @@ export class OPFS {
 		await write(`/images/${imageFileName}`, imageArrayBuffer);
 		const trackWithImagePath = { ...track, image: `/images/${imageFileName}` };
 
-		if (!this.tracksCache.find((t) => t.title === track.title && t.artist === track.artist)) {
-			this.tracksCache.push(trackWithImagePath);
-			await this.writeCache('/tracks/tracks.json', this.tracksCache);
-		}
+		this.tracksCache.push(trackWithImagePath);
+		await this.writeCache('/tracks/tracks.json', this.tracksCache);
+		return true;
 	}
 
 	public static async getSong(track: Song) {

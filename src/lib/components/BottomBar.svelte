@@ -145,24 +145,26 @@
 				>{formatTime(duration)}</span
 			>
 		</div>
-		<div class="grid h-full w-full grid-cols-3 items-center pt-4">
-			<div class="ml-6 flex items-center justify-start gap-2">
+		<div
+			class="grid h-full w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 pt-4"
+		>
+			<div class="ml-2 flex min-w-0 items-center justify-start gap-2 lg:ml-6">
 				<img
 					src={artwork ??
 						'https://raw.githubusercontent.com/Cattn/Maple/8c1ab06960d3cec36714bf99cd6cee4ebb53913a/static/temp/MapleD.svg'}
 					alt={$activeSong.title || 'Song Art'}
-					class="h-14 w-14 rounded-lg"
+					class="h-14 w-14 shrink-0 rounded-lg"
 				/>
-				<div class="flex flex-col">
-					<p class="song-title">
+				<div class="hidden min-w-0 flex-col lg:flex">
+					<p class="song-title truncate">
 						{$activeSong.title || 'Song Name'}
 					</p>
-					<p class="artist-title">
+					<p class="artist-title truncate">
 						{$activeSong.artist || 'Artist Name'}
 					</p>
 				</div>
 			</div>
-			<div class="flex justify-center gap-2">
+			<div class="flex shrink-0 justify-center gap-2">
 				<div>
 					<Button
 						iconType="full"
@@ -227,7 +229,7 @@
 					</Button>
 				</div>
 			</div>
-			<div class="mr-6 flex items-center justify-end">
+			<div class="mr-2 flex min-w-0 items-center justify-end lg:mr-6">
 				<div>
 					<Button
 						iconType="full"
@@ -243,7 +245,7 @@
 						>
 					</Button>
 				</div>
-				<div class="mx-2">
+				<div class="mx-2 hidden xl:block">
 					<svg
 						class="fill-icon-color scale-110"
 						xmlns="http://www.w3.org/2000/svg"
@@ -256,7 +258,7 @@
 						/></svg
 					>
 				</div>
-				<div class="w-40">
+				<div class="ml-3 hidden w-28 min-w-0 lg:block xl:ml-0 xl:w-40">
 					<Slider
 						min={0}
 						max={100}
@@ -266,7 +268,7 @@
 						format={(n) => `${n}%`}
 					/>
 				</div>
-				<div class="mx-2">
+				<div class="mx-2 hidden xl:block">
 					<svg
 						class="fill-icon-color scale-110"
 						xmlns="http://www.w3.org/2000/svg"
@@ -353,6 +355,32 @@
 
 	.button-mod-2 :global(svg) {
 		transform: scaleX(1.3);
+	}
+
+	@media (max-width: 1279px) {
+		.button-mod :global(button),
+		.button-mod-2 :global(button) {
+			padding-left: 18px;
+			padding-right: 18px;
+		}
+
+		.button-mod-2 :global(button) {
+			margin-left: 4px;
+			margin-right: 4px;
+		}
+	}
+
+	@media (max-width: 1023px) {
+		.button-mod :global(button),
+		.button-mod-2 :global(button) {
+			padding-left: 12px;
+			padding-right: 12px;
+		}
+
+		.button-mod :global(button) {
+			margin-left: 6px;
+			margin-right: 6px;
+		}
 	}
 
 	.fill-icon-color {
