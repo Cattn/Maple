@@ -1,3 +1,4 @@
+import { embeddedLyrics } from '$lib/lyrics';
 import { parseBlob, parseBuffer } from 'music-metadata';
 import { OPFS } from '$lib/opfs';
 import { toast } from 'svelte-sonner';
@@ -59,7 +60,7 @@ async function parseMetadataWithTimeout(
 		const timeoutPromise = new Promise<null>((_, reject) =>
 			setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs)
 		);
-		const parsePromise = parseBlob(file, { duration: false, skipPostHeaders: true });
+		const parsePromise = parseBlob(file, { duration: false, skipPostHeaders: false });
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
 		return null;
@@ -67,13 +68,15 @@ async function parseMetadataWithTimeout(
 }
 
 async function parseMetadataFast(file: File) {
+	const full = await parseMetadataWithTimeout(file);
+	if (full) return full;
 	try {
 		const headBytes = Math.min(file.size, PARSE_HEAD_BYTES);
 		const buf = new Uint8Array(await file.slice(0, headBytes).arrayBuffer());
 		const parsed = await parseBuffer(
 			buf,
 			{ mimeType: file.type || undefined, path: file.name, size: file.size },
-			{ duration: false, skipPostHeaders: true }
+			{ duration: false, skipPostHeaders: false }
 		);
 		if (parsed?.common?.title || parsed?.common?.artist) return parsed;
 	} catch {
@@ -144,7 +147,8 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 							trackNumber: metadata?.common.track?.no ?? 0,
 							disk: metadata?.common.disk?.no ?? 0,
 							ext: file.name.split('.').pop() || 'mp3',
-							fileName: file.name
+							fileName: file.name,
+							lyrics: embeddedLyrics(metadata?.common.lyrics)
 						};
 
 						const album: Album = {

@@ -47,7 +47,8 @@ const UserSettings = {
 		devMode,
 		showLogging,
 		socket,
-		jellyfinMode
+		jellyfinMode,
+		addExternalLyrics: preferences.get('addExternalLyrics') ?? false
 	},
 	theme: {
 		sourceColor,

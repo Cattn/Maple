@@ -90,6 +90,13 @@ export class OPFS {
 	}
 
 	public static async initializeLibrary() {
+		if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+			throw new Error(
+				typeof window !== 'undefined' && !window.isSecureContext
+					? 'Music storage requires HTTPS. Open Maple using an HTTPS link or localhost.'
+					: 'Music storage is unavailable in this browser. Try a supported browser with site storage enabled.'
+			);
+		}
 		const paths = ['albums', 'artists', 'tracks', 'playlists', 'config', 'images'].map(
 			(p) => `/${p}`
 		);
@@ -590,6 +597,13 @@ export class OPFS {
 		}
 	});
 
+	public static async setLyrics(id: string, lyrics: Song['lyrics']) {
+		const tracks = await this.get().tracks();
+		const track = tracks.find((item) => item.id === id);
+		if (!track) throw new Error('Track no longer exists');
+		track.lyrics = lyrics;
+		await this.writeCache('/tracks/tracks.json', tracks);
+	}
 	public static track = () => ({
 		delete: async (track: Song) => {
 			if (!this.tracksCache) {

@@ -75,7 +75,10 @@ export type Playlist = {
 	modifiedAt?: number;
 };
 
+export type LyricLine = { text: string; time?: number };
+
 export type Song = {
+	lyrics?: LyricLine[];
 	id: string;
 	title: string;
 	artist: string;

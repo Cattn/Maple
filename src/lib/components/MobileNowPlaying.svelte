@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Lyrics from './Lyrics.svelte';
+	let lyricsOpen = $state(false);
 	import { Button } from 'm3-svelte';
 	import {
 		activeSong,
@@ -8,14 +10,7 @@
 		loopEnabled,
 		shuffleEnabled
 	} from '$lib/store';
-	import {
-		next,
-		previous,
-		togglePlay,
-		seekTo,
-		toggleShuffle,
-		toggleLoop
-	} from '$lib/player';
+	import { next, previous, togglePlay, seekTo, toggleShuffle, toggleLoop } from '$lib/player';
 	import { OPFS } from '$lib/opfs';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
@@ -54,6 +49,7 @@
 		if (path === lastPathname) return;
 		lastPathname = path;
 		queueOpen = false;
+		lyricsOpen = false;
 		expanded = false;
 		canDismiss = false;
 		sheetDragY = 0;
@@ -169,7 +165,13 @@
 		} catch {}
 	}
 
+	function toggleLyrics() {
+		lyricsOpen = !lyricsOpen;
+		queueOpen = false;
+	}
+
 	function toggleQueue() {
+		lyricsOpen = false;
 		if (!queueOpen) {
 			expanded = false;
 			sheetDragY = 0;
@@ -223,9 +225,7 @@
 {#if expanded}
 	<div
 		class="fixed inset-0 z-60 bg-black/40"
-		style={sheetDragY > 0
-			? `opacity: ${Math.max(0, 1 - sheetDragY / 300)}`
-			: undefined}
+		style={sheetDragY > 0 ? `opacity: ${Math.max(0, 1 - sheetDragY / 300)}` : undefined}
 		transition:fade={{ duration: 300, easing: cubicOut }}
 		onpointerdown={collapse}
 		role="presentation"
@@ -236,9 +236,7 @@
 			!canDismiss && 'pointer-events-none',
 			!sheetDragging && 'transition-transform duration-200 ease-out'
 		]}
-		style={sheetDragY > 0 || sheetDragging
-			? `transform: translateY(${sheetDragY}px)`
-			: undefined}
+		style={sheetDragY > 0 || sheetDragging ? `transform: translateY(${sheetDragY}px)` : undefined}
 		transition:fly={{ y: '100%', duration: 300, easing: cubicOut }}
 		onintroend={onSheetIntroEnd}
 		role="dialog"
@@ -246,7 +244,7 @@
 		aria-label="Now playing"
 	>
 		<div
-			class="flex w-full touch-none cursor-grab items-center justify-center py-3 active:cursor-grabbing"
+			class="flex w-full cursor-grab touch-none items-center justify-center py-3 active:cursor-grabbing"
 			role="button"
 			tabindex="0"
 			aria-label="Drag down to close"
@@ -327,10 +325,7 @@
 				</Button>
 				<Button iconType="full" square variant="tonal" onclick={previous}>
 					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-						<path
-							fill="currentColor"
-							d="M5.5 18V6h2v12zm13 0l-9-6l9-6zm-2-3.75v-4.5L13.1 12z"
-						/>
+						<path fill="currentColor" d="M5.5 18V6h2v12zm13 0l-9-6l9-6zm-2-3.75v-4.5L13.1 12z" />
 					</svg>
 				</Button>
 				<div class="play-btn">
@@ -348,10 +343,7 @@
 				</div>
 				<Button iconType="full" square variant="tonal" onclick={next}>
 					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-						<path
-							fill="currentColor"
-							d="M16.5 18V6h2v12zm-11 0V6l9 6zm2-3.75L10.9 12L7.5 9.75z"
-						/>
+						<path fill="currentColor" d="M16.5 18V6h2v12zm-11 0V6l9 6zm2-3.75L10.9 12L7.5 9.75z" />
 					</svg>
 				</Button>
 				<Button
@@ -369,7 +361,8 @@
 				</Button>
 			</div>
 
-			<div class="mt-4 flex justify-center">
+			<div class="mt-4 flex items-center justify-center gap-3">
+				<Button variant={lyricsOpen ? 'filled' : 'tonal'} onclick={toggleLyrics}>Lyrics</Button>
 				<div class="queue-btn">
 					<Button
 						iconType="full"
@@ -411,12 +404,13 @@
 					{$activeSong.artist || 'Artist Name'}
 				</p>
 			</div>
-			<div class="flex shrink-0 items-center gap-1">
-				<div
-					class="queue-btn"
-					role="presentation"
-					onpointerdown={(e) => e.stopPropagation()}
-				>
+			<div
+				class="flex shrink-0 items-center gap-1"
+				role="presentation"
+				onpointerdown={(e) => e.stopPropagation()}
+			>
+				<Button variant={lyricsOpen ? 'filled' : 'tonal'} onclick={toggleLyrics}>Lyrics</Button>
+				<div class="queue-btn" role="presentation" onpointerdown={(e) => e.stopPropagation()}>
 					<Button
 						iconType="full"
 						square
@@ -449,6 +443,7 @@
 	</div>
 {/if}
 
+{#if lyricsOpen}<Lyrics onClose={() => (lyricsOpen = false)} />{/if}
 {#if queueOpen}
 	<Queue onClose={() => (queueOpen = false)} />
 {/if}
