@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Lyrics from './Lyrics.svelte';
+	let lyricsOpen = $state(false);
 	import { Button, Slider } from 'm3-svelte';
 	import {
 		activeSong,
@@ -237,6 +239,13 @@
 				</div>
 			</div>
 			<div class="mr-2 flex min-w-0 items-center justify-end lg:mr-6">
+				<Button
+					variant="tonal"
+					onclick={() => {
+						lyricsOpen = !lyricsOpen;
+						queueOpen = false;
+					}}>Lyrics</Button
+				>
 				<div>
 					<Button
 						iconType="full"
@@ -293,6 +302,7 @@
 	</div>
 </div>
 
+{#if lyricsOpen}<Lyrics onClose={() => (lyricsOpen = false)} />{/if}
 {#if queueOpen}
 	<Queue onClose={() => (queueOpen = false)} />
 {/if}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ExternalLyrics from './ExternalLyrics.svelte';
+	import UserSettings from '$lib/preferences/usersettings';
 	import type { Song } from '$lib/types';
 	import { playlists } from '$lib/global.svelte';
 	import { OPFS } from '$lib/opfs';
@@ -330,6 +332,10 @@
 			style:left={`${menuPosition?.left ?? 0}px`}
 		>
 			<div class="bg-surface border-outline min-w-48 rounded-xl border py-2 shadow-2xl">
+				{#if track && UserSettings.preferences.addExternalLyrics}<ExternalLyrics
+						{track}
+						onDone={() => (showMenu = false)}
+					/>{/if}
 				<button
 					onclick={onRemove ? handleRemove : handleDelete}
 					class="text-on-surface hover:bg-surface-container-high flex w-full items-center px-4 py-3 text-left transition-colors duration-150"

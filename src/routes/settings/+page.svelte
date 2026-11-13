@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { Card, Button, Dialog } from 'm3-svelte';
 	import ColorPicker from 'svelte-awesome-color-picker';
-	import { isLoggedIn, SavedUser, appInstallPrompt, appInstalled, appUpdateReady } from '$lib/store';
+	import {
+		isLoggedIn,
+		SavedUser,
+		appInstallPrompt,
+		appInstalled,
+		appUpdateReady
+	} from '$lib/store';
 	import { version, dev } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
@@ -51,7 +57,9 @@
 		const registration = $appUpdateReady;
 		if (!registration?.waiting || reloadingApp) return;
 		reloadingApp = true;
-		navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+		navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), {
+			once: true
+		});
 		registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 	}
 	const webhookSettings = new Settings('webhook');
@@ -71,6 +79,8 @@
 	let p2pTransfersEnabled = $state(true);
 	let initialP2pTransfersEnabled = $state(true);
 	const preferencesSettings = new Settings('preferences');
+	let externalLyrics = $state(UserSettings.preferences.addExternalLyrics);
+	let initialExternalLyrics = $state(UserSettings.preferences.addExternalLyrics);
 	const initialSocketValue =
 		preferencesSettings.get('socket') !== null ? preferencesSettings.get('socket') : true;
 	let socketCommunicationEnabled = $state(initialSocketValue);
@@ -148,7 +158,8 @@
 	};
 
 	let hasChanges = $derived(
-		name !== initialName ||
+		externalLyrics !== initialExternalLyrics ||
+			name !== initialName ||
 			listeningPublic !== initialListeningPublic ||
 			webhookEnabled !== initialWebhookEnabled ||
 			webhookUrl !== initialWebhookUrl ||
@@ -188,7 +199,9 @@
 		}
 
 		if (listeningPublic !== initialListeningPublic) {
-			const result = await UserManager.setListeningVisibility(listeningPublic ? 'public' : 'private');
+			const result = await UserManager.setListeningVisibility(
+				listeningPublic ? 'public' : 'private'
+			);
 			if ('error' in result) {
 				toast.error(result.error);
 				return;
@@ -215,6 +228,9 @@
 			initialSocketCommunicationEnabled = socketCommunicationEnabled;
 		}
 
+		preferencesSettings.set('addExternalLyrics', externalLyrics);
+		UserSettings.preferences.addExternalLyrics = externalLyrics;
+		initialExternalLyrics = externalLyrics;
 		if (jellyfinModeEnabled !== initialJellyfinModeEnabled) {
 			preferencesSettings.set('jellyfinMode', jellyfinModeEnabled);
 			UserSettings.preferences.jellyfinMode = jellyfinModeEnabled;
@@ -266,7 +282,9 @@
 	};
 
 	onMount(async () => {
-		appWindow = window.matchMedia('(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)').matches;
+		appWindow = window.matchMedia(
+			'(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)'
+		).matches;
 		title.set('Settings');
 		await refreshTrackCount();
 	});
@@ -586,16 +604,24 @@
 					{#if appWindow || $appInstalled}
 						<p class="text-on-surface-variant text-sm">Maple is installed on this device.</p>
 					{:else if $appInstallPrompt}
-						<p class="text-on-surface-variant text-sm">Install Maple to open your library directly from your home screen.</p>
-						<Button variant="filled" onclick={installApp} disabled={installingApp}>Install Maple</Button>
+						<p class="text-on-surface-variant text-sm">
+							Install Maple to open your library directly from your home screen.
+						</p>
+						<Button variant="filled" onclick={installApp} disabled={installingApp}
+							>Install Maple</Button
+						>
 					{:else}
-						<p class="text-on-surface-variant text-sm">If your browser offers installation, use its Install app or Add to home screen menu.</p>
+						<p class="text-on-surface-variant text-sm">
+							If your browser offers installation, use its Install app or Add to home screen menu.
+						</p>
 					{/if}
 					{#if installMessage && !$appInstalled}
 						<p class="text-on-surface-variant text-sm" role="status">{installMessage}</p>
 					{/if}
 					{#if $appUpdateReady}
-						<Button variant="outlined" onclick={reloadApp} disabled={reloadingApp}>Reload to update</Button>
+						<Button variant="outlined" onclick={reloadApp} disabled={reloadingApp}
+							>Reload to update</Button
+						>
 					{/if}
 					<p class="text-on-surface-variant text-xs">Build {dev ? 'development' : version}</p>
 				</Card>
@@ -679,6 +705,28 @@
 								</div>
 								<label class="relative inline-flex h-6 w-11 cursor-pointer items-center">
 									<input type="checkbox" class="peer sr-only" bind:checked={jellyfinModeEnabled} />
+									<div
+										class="bg-outline-variant peer-checked:bg-primary/90 h-6 w-11 rounded-full transition"
+									></div>
+									<span
+										class="bg-surface absolute top-0.5 left-0.5 h-5 w-5 rounded-full shadow-sm transition peer-checked:translate-x-5"
+									></span>
+								</label>
+							</div>
+							<div class="flex items-start justify-between gap-4">
+								<div class="flex flex-col gap-1">
+									<p class="text-on-surface-variant text-sm font-semibold">Add external lyrics</p>
+									<p class="text-on-surface-variant text-xs">
+										Add LRC or text files from a track’s context menu.
+									</p>
+								</div>
+								<label class="relative inline-flex h-6 w-11 cursor-pointer items-center">
+									<input
+										type="checkbox"
+										class="peer sr-only"
+										bind:checked={externalLyrics}
+										aria-label="Add external lyrics"
+									/>
 									<div
 										class="bg-outline-variant peer-checked:bg-primary/90 h-6 w-11 rounded-full transition"
 									></div>
