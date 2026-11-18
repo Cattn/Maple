@@ -1,36 +1,25 @@
 <script lang="ts">
-	import { Button } from 'm3-svelte';
 	import { queueState } from '$lib/store';
 	import { get } from 'svelte/store';
 	import ListTrack from '$lib/components/ListTrack.svelte';
 	import { visibleFlip } from '$lib/animate';
 	import { cubicOut } from 'svelte/easing';
-	import type { Song } from '$lib/types';
 
-	let { onClose }: { onClose?: () => void } = $props();
+	let { onClose, embedded = false }: { onClose?: () => void; embedded?: boolean } = $props();
 
 	let dragIndex = $state<number | null>(null);
 	let dropIndex = $state<number | null>(null);
 	let canDrag = $state(true);
-	let itemsCache = $state<Song[]>([]);
-
-	$effect(() => {
-		const currentItems = $queueState.items;
-		const itemsChanged =
-			itemsCache.length !== currentItems.length ||
-			itemsCache.some((item, i) => item.id !== currentItems[i]?.id);
-
-		if (itemsChanged) {
-			itemsCache = [...currentItems];
-		}
-	});
+	const firstVisibleIndex = $derived(Math.max(0, $queueState.currentIndex));
+	const visibleItems = $derived($queueState.items.slice(firstVisibleIndex));
 
 	function moveQueueItem(fromIndex: number, toIndex: number) {
 		const state = get(queueState);
 		if (fromIndex === toIndex) return;
+		const firstVisibleIndex = Math.max(0, state.currentIndex);
 		if (
-			fromIndex < 0 ||
-			toIndex < 0 ||
+			fromIndex < firstVisibleIndex ||
+			toIndex < firstVisibleIndex ||
 			fromIndex >= state.items.length ||
 			toIndex >= state.items.length
 		)
@@ -54,7 +43,6 @@
 			currentIndex: newCurrentIndex,
 			source: state.source
 		});
-		itemsCache = [...next];
 	}
 
 	function removeQueueItem(index: number) {
@@ -77,7 +65,6 @@
 			currentIndex: newCurrentIndex,
 			source: state.source
 		});
-		itemsCache = [...next];
 	}
 
 	if (typeof window !== 'undefined') {
@@ -85,17 +72,29 @@
 	}
 </script>
 
-<div class="bg-surface fixed inset-0 bottom-24 left-0 z-40 overflow-y-auto md:bottom-30 md:left-23">
+<section
+	aria-label="Queue"
+	class={[
+		'bg-surface',
+		embedded
+			? 'border-outline-variant min-h-0 min-w-0 overflow-clip rounded-3xl border'
+			: 'fixed inset-0 bottom-24 z-40 overflow-y-auto'
+	]}
+>
 	<div class="flex h-full flex-col">
-		<div class="bg-surface-container-high/80 sticky top-0 z-10 backdrop-blur-md">
-			<div class="flex items-center gap-4 p-4 md:p-6">
-				<div class="bg-primary-container flex h-10 w-10 items-center justify-center rounded-full">
+		<header
+			class="bg-surface-container border-outline-variant sticky top-0 z-10 max-md:shadow-[inset_0_-1px_rgb(var(--m3-scheme-outline-variant))] md:shrink-0 md:border-b"
+		>
+			<div class="flex items-center gap-4 p-4 md:items-start md:p-6">
+				<div
+					class="bg-primary-container flex size-10 shrink-0 items-center justify-center rounded-xl md:size-14"
+				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="20"
 						height="20"
 						viewBox="0 0 24 24"
-						class="text-on-primary-container"
+						class="text-on-primary-container md:size-6"
 					>
 						<path
 							fill="currentColor"
@@ -104,42 +103,46 @@
 					</svg>
 				</div>
 				<div class="flex min-w-0 flex-1 flex-col">
-					<h1 class="queue-title">Queue</h1>
+					<h2 class="text-on-surface truncate text-xl leading-6 font-bold md:leading-7">Queue</h2>
 					<p class="text-on-surface-variant text-sm">
-						{itemsCache.length}
-						{itemsCache.length === 1 ? 'track' : 'tracks'}
+						{visibleItems.length}
+						{visibleItems.length === 1 ? 'track' : 'tracks'}
 					</p>
 				</div>
 				{#if onClose}
-					<Button iconType="full" square variant="tonal" onclick={onClose} aria-label="Close queue">
-						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-							<path
-								fill="currentColor"
-								d="M6.4 19L5 17.6L10.6 12L5 6.4L6.4 5L12 10.6L17.6 5L19 6.4L13.4 12L19 17.6L17.6 19L12 13.4z"
-							/>
-						</svg>
-					</Button>
+					<button
+						type="button"
+						class="hover:bg-surface-container-high flex size-10 shrink-0 items-center justify-center rounded-full md:block md:size-auto md:px-3 md:py-2"
+						onclick={onClose}
+						aria-label="Close queue">✕</button
+					>
 				{/if}
 			</div>
-		</div>
+		</header>
 
-		<div class="flex-1 p-4 pt-2 md:px-6 md:pb-6">
+		<div
+			class={[
+				'flex-1 p-4 pt-2 md:min-h-0 md:overflow-y-auto md:overscroll-y-contain md:px-6 md:pb-6',
+				embedded && 'inset-scrollbar inset-scrollbar-bottom'
+			]}
+		>
 			<div class="bg-surface-container rounded-2xl shadow-sm">
 				<ul class="divide-outline-variant/50 divide-y">
-					{#each itemsCache as item, index (item.id)}
+					{#each visibleItems as item, visibleIndex (item.id)}
+						{@const index = firstVisibleIndex + visibleIndex}
 						<li
 							animate:visibleFlip={{ duration: 300, easing: cubicOut }}
 							class={$queueState.currentIndex === index ? 'bg-primary-container/30' : ''}
 						>
 							<ListTrack
 								track={item}
-								index={index + 1}
+								index={visibleIndex + 1}
 								trackNo={item.trackNumber}
 								showThumbnail={true}
 								showDropIndicator={dropIndex === index + 1}
 								onRemove={() => removeQueueItem(index)}
 								draggable={canDrag}
-								playbackContext={itemsCache}
+								playbackContext={$queueState.items}
 								playbackSource={$queueState.source}
 								onDragStart={(e) => {
 									if (!canDrag) return;
@@ -177,27 +180,4 @@
 			</div>
 		</div>
 	</div>
-</div>
-
-<style>
-	.queue-title {
-		color: var(--color-secondary);
-		font-size: 20px;
-		font-family: 'Roboto Flex', sans-serif;
-		font-weight: 700;
-		font-style: normal;
-		line-height: 24px;
-		font-variation-settings:
-			'slnt' 0,
-			'wdth' 115,
-			'GRAD' 50,
-			'XOPQ' 96,
-			'XTRA' 468,
-			'YOPQ' 75,
-			'YTAS' 750,
-			'YTDE' -203,
-			'YTFI' 728,
-			'YTLC' 514,
-			'YTUC' 712;
-	}
-</style>
+</section>

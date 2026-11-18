@@ -28,31 +28,53 @@ export class OPFS {
 	}
 
 	private static deferJsonWrites = false;
+	private static pendingTrackRead: Promise<Song[]> | undefined;
+	private static pendingTrackWrite = Promise.resolve();
 
 	private static async writeCache<T>(path: string, cache: T[]): Promise<void> {
 		if (this.deferJsonWrites) return;
 		await write(path, JSON.stringify(cache));
 	}
 
+	private static async readTracksCache(): Promise<Song[]> {
+		const cached = this.tracksCache;
+		if (cached?.length) return cached;
+		this.pendingTrackRead ??= this.getCache('/tracks/tracks.json', cached)
+			.then((tracks) => {
+				if (this.tracksCache === cached) this.tracksCache = tracks;
+				return this.tracksCache ?? tracks;
+			})
+			.finally(() => {
+				this.pendingTrackRead = undefined;
+			});
+		return this.pendingTrackRead;
+	}
+
+	private static async writeTracksCache(tracks: Song[], flush = false): Promise<void> {
+		if (this.deferJsonWrites && !flush) return;
+		const pending = this.pendingTrackWrite.then(() =>
+			write('/tracks/tracks.json', JSON.stringify(tracks))
+		);
+		this.pendingTrackWrite = pending.catch(() => {});
+		await pending;
+	}
+
 	public static async beginImport(): Promise<void> {
-		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
+		await this.readTracksCache();
 		this.albumsCache = await this.getCache('/albums/albums.json', this.albumsCache);
 		this.artistsCache = await this.getCache('/artists/artists.json', this.artistsCache);
 		this.deferJsonWrites = true;
 	}
 
 	public static async flushImport(): Promise<void> {
-		if (this.tracksCache) await write('/tracks/tracks.json', JSON.stringify(this.tracksCache));
+		if (this.tracksCache) await this.writeTracksCache(this.tracksCache, true);
 		if (this.albumsCache) await write('/albums/albums.json', JSON.stringify(this.albumsCache));
 		if (this.artistsCache) await write('/artists/artists.json', JSON.stringify(this.artistsCache));
 	}
 
 	public static async endImport(): Promise<void> {
-		try {
-			await this.flushImport();
-		} finally {
-			this.deferJsonWrites = false;
-		}
+		this.deferJsonWrites = false;
+		await this.flushImport();
 	}
 
 	public static async requestPersistentStorage(): Promise<boolean> {
@@ -288,13 +310,13 @@ export class OPFS {
 	}
 
 	public static async hasTrack(title: string, artist: string): Promise<boolean> {
-		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-		return this.tracksCache.some((t) => t.title === title && t.artist === artist);
+		const tracks = await this.readTracksCache();
+		return tracks.some((t) => t.title === title && t.artist === artist);
 	}
 
 	public static async discardImportedTrack(track: Song): Promise<void> {
-		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-		if (this.tracksCache.some((t) => t.id === track.id)) {
+		const tracks = await this.readTracksCache();
+		if (tracks.some((t) => t.id === track.id)) {
 			await this.track().delete(track);
 		} else {
 			await file(`/tracks/${track.id}.${track.ext}`)
@@ -320,8 +342,8 @@ export class OPFS {
 	}
 
 	public static async addTrack(track: Song): Promise<boolean> {
-		this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-		if (this.tracksCache.some((t) => t.title === track.title && t.artist === track.artist)) {
+		const tracks = await this.readTracksCache();
+		if (tracks.some((t) => t.title === track.title && t.artist === track.artist)) {
 			return false;
 		}
 
@@ -333,8 +355,8 @@ export class OPFS {
 		await write(`/images/${imageFileName}`, imageArrayBuffer);
 		const trackWithImagePath = { ...track, image: `/images/${imageFileName}` };
 
-		this.tracksCache.push(trackWithImagePath);
-		await this.writeCache('/tracks/tracks.json', this.tracksCache);
+		tracks.push(trackWithImagePath);
+		await this.writeTracksCache(tracks);
 		return true;
 	}
 
@@ -361,14 +383,11 @@ export class OPFS {
 	}
 
 	public static get = () => ({
-		tracks: async () => {
-			this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-			return this.tracksCache;
-		},
+		tracks: () => this.readTracksCache(),
 
 		track: async (id: string) => {
-			this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-			return this.tracksCache.find((t) => t.id === id);
+			const tracks = await this.readTracksCache();
+			return tracks.find((t) => t.id === id);
 		},
 
 		albums: async () => {
@@ -597,22 +616,39 @@ export class OPFS {
 		}
 	});
 
-	public static async setLyrics(id: string, lyrics: Song['lyrics']) {
+	public static async setLyrics(id: string, lyrics: Song['lyrics'], onlyIfMissing = false) {
 		const tracks = await this.get().tracks();
 		const track = tracks.find((item) => item.id === id);
 		if (!track) throw new Error('Track no longer exists');
-		track.lyrics = lyrics;
-		await this.writeCache('/tracks/tracks.json', tracks);
+		if (onlyIfMissing && track.lyrics !== undefined) return track;
+		track.lyrics = lyrics ?? [];
+		await this.writeTracksCache(tracks);
+		return track;
+	}
+
+	public static async setDurationIfMissing(id: string, duration: number): Promise<number | undefined> {
+		if (!Number.isFinite(duration) || duration <= 0) return;
+		const tracks = await this.get().tracks();
+		const track = tracks.find((item) => item.id === id);
+		if (!track) return;
+		if (Number.isFinite(track.duration) && track.duration > 0) return track.duration;
+		const previous = track.duration;
+		track.duration = duration;
+		try {
+			await this.writeTracksCache(tracks);
+		} catch (error) {
+			track.duration = previous;
+			throw error;
+		}
+		return duration;
 	}
 	public static track = () => ({
 		delete: async (track: Song) => {
-			if (!this.tracksCache) {
-				this.tracksCache = await this.getCache('/tracks/tracks.json', this.tracksCache);
-			}
-			const index = this.tracksCache.findIndex((t) => t.id === track.id);
+			const tracks = this.tracksCache ?? (await this.readTracksCache());
+			const index = tracks.findIndex((t) => t.id === track.id);
 			if (index !== -1) {
-				this.tracksCache.splice(index, 1);
-				await this.writeCache('/tracks/tracks.json', this.tracksCache);
+				tracks.splice(index, 1);
+				await this.writeTracksCache(tracks);
 				await file(`/tracks/${track.id}.${track.ext}`).remove();
 				await file(`/images/${track.id}.image`).remove();
 

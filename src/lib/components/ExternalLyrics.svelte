@@ -5,6 +5,7 @@
 	import { refreshLibrary } from '$lib/global.svelte';
 	import { activeSong } from '$lib/store';
 	import { toast } from 'svelte-sonner';
+	import LyricsIcon from './LyricsIcon.svelte';
 	let { track, onDone }: { track: Song; onDone: () => void } = $props();
 	let input: HTMLInputElement;
 	async function upload(event: Event) {
@@ -30,6 +31,9 @@
 
 <input bind:this={input} type="file" accept=".lrc,.txt" class="hidden" onchange={upload} />
 <button
-	class="text-on-surface hover:bg-surface-container-high w-full px-4 py-3 text-left text-sm font-medium"
-	onclick={() => input.click()}>Add external lyrics</button
+	class="text-on-surface hover:bg-surface-container-high flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150"
+	onclick={() => input.click()}
 >
+	<LyricsIcon size={20} />
+	<span class="text-sm font-medium">Add external lyrics</span>
+</button>

@@ -1,3 +1,5 @@
+import { parseBlob } from 'music-metadata';
+import { embeddedLyrics } from '$lib/lyrics';
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
 import { OPFS } from '$lib/opfs';
@@ -22,9 +24,11 @@ import type { QueueSnapshot } from '$lib/store';
 import UserSettings from '$lib/preferences/usersettings';
 import { SERVER } from '$lib/api/server';
 import { claimPlayback, ownsPlayback } from '$lib/playback';
+import { refreshLibrary } from '$lib/global.svelte';
 
 let mediaSessionInitialized = false;
 let currentAudioUrl: string | null = null;
+let metadataListeners: AbortController | undefined;
 let playbackRequest = 0;
 let preparedAudio: {
 	key: string;
@@ -68,11 +72,14 @@ function setMediaAction(action: MediaSessionAction, handler: MediaSessionActionH
 }
 
 function playAudio(audio: HTMLAudioElement) {
-	return audio.play().then(() => true).catch((error) => {
-		syncAudioState(audio);
-		if (error.name !== 'AbortError') console.error('Unable to play audio:', error);
-		return false;
-	});
+	return audio
+		.play()
+		.then(() => true)
+		.catch((error) => {
+			syncAudioState(audio);
+			if (error.name !== 'AbortError') console.error('Unable to play audio:', error);
+			return false;
+		});
 }
 
 function initMediaSession() {
@@ -141,7 +148,9 @@ function updateMediaSessionMetadata(song: Song, artworkUrl?: string) {
 	if (!browser || !('mediaSession' in navigator)) return;
 	initMediaSession();
 
-	const artwork: MediaImage[] = artworkUrl ? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }] : [];
+	const artwork: MediaImage[] = artworkUrl
+		? [{ src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }]
+		: [];
 
 	navigator.mediaSession.metadata = new MediaMetadata({
 		title: song.title || 'Unknown Title',
@@ -152,16 +161,15 @@ function updateMediaSessionMetadata(song: Song, artworkUrl?: string) {
 }
 
 function updateMediaSessionPositionState(audio: HTMLAudioElement) {
-	if (!browser || !('mediaSession' in navigator) || !audio.duration || !isFinite(audio.duration)) return;
+	if (!browser || !('mediaSession' in navigator) || !audio.duration || !isFinite(audio.duration))
+		return;
 	try {
 		navigator.mediaSession.setPositionState({
 			duration: audio.duration,
 			playbackRate: audio.playbackRate,
 			position: audio.currentTime
 		});
-	} catch {
-
-	}
+	} catch {}
 }
 
 type QueueSourceState = QueueSnapshot['source'];
@@ -203,7 +211,8 @@ function claim(song: Song) {
 async function resume(audio: HTMLAudioElement) {
 	const song = get(activeSong);
 	const request = playbackRequest;
-	if (await playAudio(audio) && song?.id && request === playbackRequest && !ownsPlayback()) claim(song);
+	if ((await playAudio(audio)) && song?.id && request === playbackRequest && !ownsPlayback())
+		claim(song);
 }
 
 async function sendWebhook(song: Song) {
@@ -285,7 +294,44 @@ function prepareNextAudio() {
 		})
 	};
 	preparedAudio = prepared;
-	void prepared.loading.then((blob) => { prepared.blob = blob; });
+	void prepared.loading.then((blob) => {
+		prepared.blob = blob;
+	});
+}
+
+async function checkLyrics(song: Song, blob: Blob) {
+	try {
+		const stored = await OPFS.get().track(song.id);
+		if (!stored) return;
+		let updated = stored;
+		if (stored.lyrics === undefined) {
+			const metadata = await parseBlob(blob, { skipCovers: true });
+			updated = await OPFS.setLyrics(song.id, embeddedLyrics(metadata.common.lyrics) ?? [], true);
+		}
+		activeSong.update((current) =>
+			current.id === song.id ? { ...current, lyrics: updated.lyrics } : current
+		);
+	} catch (error) {
+		console.error('Unable to check track lyrics:', error);
+	}
+}
+
+async function backfillTrackDuration(id: string, duration: number) {
+	try {
+		const savedDuration = await OPFS.setDurationIfMissing(id, duration);
+		if (savedDuration === undefined) return;
+		const updateDuration = (track: Song) =>
+			track.id === id ? { ...track, duration: savedDuration } : track;
+		const state = get(queueState);
+		if (state.items.some((track) => track.id === id)) {
+			updateQueue(state.items.map(updateDuration), state.currentIndex, state.source);
+		}
+		if (get(activeSong).id === id) activeSong.update(updateDuration);
+		originalQueue.update((items) => items.map(updateDuration));
+		await refreshLibrary();
+	} catch (error) {
+		console.error('Unable to save track duration:', error);
+	}
 }
 
 async function playAtIndex(index: number) {
@@ -293,14 +339,17 @@ async function playAtIndex(index: number) {
 	if (!state.items.length) return;
 	const length = state.items.length;
 	const normalized = ((index % length) + length) % length;
-	const song = state.items[normalized];
+	let song = state.items[normalized];
 	const request = ++playbackRequest;
 	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
 	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
 	if (!blob || request !== playbackRequest) return;
-	updateQueue(state.items, normalized, state.source);
+	const latestQueue = get(queueState);
+	const queue = latestQueue.items[normalized]?.id === song.id ? latestQueue : state;
+	song = queue.items[normalized];
+	updateQueue(queue.items, normalized, queue.source);
 	activeSong.set(song);
-	statsManager.recordPlay(song, state.source);
+	statsManager.recordPlay(song, queue.source);
 	recentlyPlayedManager.add(song);
 	const audioUrl = URL.createObjectURL(blob);
 	curTime.set(0);
@@ -312,23 +361,44 @@ async function playAtIndex(index: number) {
 			audio.pause();
 			revokeCurrentAudioUrl();
 			currentAudioUrl = audioUrl;
+			metadataListeners?.abort();
+			metadataListeners = new AbortController();
+			const { signal } = metadataListeners;
+			if (!Number.isFinite(song.duration) || song.duration <= 0) {
+				const readDuration = () => {
+					const duration = audio.duration;
+					if (!Number.isFinite(duration) || duration <= 0) return;
+					audio.removeEventListener('durationchange', readDuration);
+					audio.removeEventListener('loadedmetadata', readDuration);
+					void backfillTrackDuration(song.id, duration);
+				};
+				audio.addEventListener('durationchange', readDuration, { signal });
+				audio.addEventListener('loadedmetadata', readDuration, { signal });
+			}
+			audio.addEventListener(
+				'loadedmetadata',
+				() => {
+					updateMediaSessionPositionState(audio);
+				},
+				{ once: true, signal }
+			);
 			audio.src = audioUrl;
 			started = playAudio(audio);
-			audio.addEventListener('loadedmetadata', () => {
-				updateMediaSessionPositionState(audio);
-			}, { once: true });
 			return { ...value, audio, playing: !audio.paused, currentTime: 0, onEnded: next };
 		}
 		return value;
 	});
+	void checkLyrics(song, blob);
 	updateMediaSessionMetadata(song);
 	if (song.image && typeof song.image === 'string') {
-		void OPFS.getImageUrl(song.image).then((url) => {
-			if (request === playbackRequest) updateMediaSessionMetadata(song, url);
-		}).catch(() => {});
+		void OPFS.getImageUrl(song.image)
+			.then((url) => {
+				if (request === playbackRequest) updateMediaSessionMetadata(song, url);
+			})
+			.catch(() => {});
 	}
 	prepareNextAudio();
-	if (await started && request === playbackRequest) claim(song);
+	if ((await started) && request === playbackRequest) claim(song);
 	void sendWebhook(song);
 }
 
@@ -399,7 +469,7 @@ export function togglePlay() {
 		resume(state.audio);
 	}
 	updateMediaSessionPositionState(state.audio);
-} 
+}
 
 export function setVolumeLevel(volume: number) {
 	audioPlayer.update((value) => ({ ...value, volume, changeVolume: true }));
