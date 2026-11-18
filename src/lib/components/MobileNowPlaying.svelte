@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Lyrics from './Lyrics.svelte';
+	import LyricsIcon from './LyricsIcon.svelte';
+	import { hasLyrics } from '$lib/lyrics';
 	let lyricsOpen = $state(false);
 	import { Button } from 'm3-svelte';
 	import {
@@ -222,6 +224,23 @@
 	}
 </script>
 
+{#snippet lyricsButton()}
+	{#if hasLyrics($activeSong)}
+		<div class="lyrics-btn">
+			<Button
+				iconType="full"
+				square
+				variant={lyricsOpen ? 'filled' : 'tonal'}
+				aria-label="Lyrics"
+				aria-pressed={lyricsOpen}
+				onclick={toggleLyrics}
+			>
+				<LyricsIcon />
+			</Button>
+		</div>
+	{/if}
+{/snippet}
+
 {#if expanded}
 	<div
 		class="fixed inset-0 z-60 bg-black/40"
@@ -362,7 +381,7 @@
 			</div>
 
 			<div class="mt-4 flex items-center justify-center gap-3">
-				<Button variant={lyricsOpen ? 'filled' : 'tonal'} onclick={toggleLyrics}>Lyrics</Button>
+				{@render lyricsButton()}
 				<div class="queue-btn">
 					<Button
 						iconType="full"
@@ -409,7 +428,7 @@
 				role="presentation"
 				onpointerdown={(e) => e.stopPropagation()}
 			>
-				<Button variant={lyricsOpen ? 'filled' : 'tonal'} onclick={toggleLyrics}>Lyrics</Button>
+				{@render lyricsButton()}
 				<div class="queue-btn" role="presentation" onpointerdown={(e) => e.stopPropagation()}>
 					<Button
 						iconType="full"
@@ -443,14 +462,15 @@
 	</div>
 {/if}
 
-{#if lyricsOpen}<Lyrics onClose={() => (lyricsOpen = false)} />{/if}
+{#if lyricsOpen && hasLyrics($activeSong)}<Lyrics onClose={() => (lyricsOpen = false)} />{/if}
 {#if queueOpen}
 	<Queue onClose={() => (queueOpen = false)} />
 {/if}
 
 <style>
 	.play-btn :global(button),
-	.queue-btn :global(button) {
+	.queue-btn :global(button),
+	.lyrics-btn :global(button) {
 		border-radius: 50%;
 	}
 </style>

@@ -1,4 +1,4 @@
-import type { LyricLine } from '$lib/types';
+import type { LyricLine, Song } from '$lib/types';
 import type { ILyricsTag } from 'music-metadata';
 
 export function parseLyrics(text: string): LyricLine[] {
@@ -28,4 +28,8 @@ export function embeddedLyrics(tags?: ILyricsTag[]): LyricLine[] | undefined {
 		if (tag.text?.trim()) return parseLyrics(tag.text);
 	}
 	return undefined;
+}
+
+export function hasLyrics(song: Pick<Song, 'lyrics'>): boolean {
+	return song.lyrics?.some((line) => line.text.trim().length > 0) ?? false;
 }

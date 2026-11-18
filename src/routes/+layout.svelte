@@ -21,10 +21,22 @@
 	import LibraryImportSheet from '$lib/components/LibraryImportSheet.svelte';
 	import PasskeyPrompt from '$lib/components/PasskeyPrompt.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import Lyrics from '$lib/components/Lyrics.svelte';
+	import Queue from '$lib/components/Queue.svelte';
+	import { hasLyrics } from '$lib/lyrics';
 
 	let { children, data } = $props();
+	let lyricsOpen = $state(false);
+	let queueOpen = $state(false);
+	const showLyrics = $derived(lyricsOpen && hasLyrics($activeSong));
+	const showSidePanel = $derived(queueOpen || showLyrics);
 	let initialNavigation = true;
 	const transientPaths = ['/onboard', '/login', '/register', '/verified', '/reset-password'];
+
+	$effect(() => {
+		$page.url.pathname;
+		queueOpen = false;
+	});
 
 	function rememberAppRoute(url: URL, storage: Storage, initial: boolean): string | null {
 		const routeKey = 'app.lastRoute';
@@ -160,15 +172,42 @@
 
 <SideBar />
 <div
-	class="fixed inset-0 bottom-36 left-0 overflow-x-hidden overflow-y-auto overscroll-y-contain md:bottom-30 md:left-23"
+	class={[
+		'fixed inset-0 bottom-36 md:bottom-30 md:left-23 md:grid',
+		showSidePanel &&
+			'md:bg-surface md:grid-cols-[minmax(0,1fr)_minmax(15rem,32%)] md:grid-rows-1 md:gap-4 md:p-4'
+	]}
 >
-	<div>
-		{@render children()}
+	<div
+		class={[
+			'h-full min-h-0 min-w-0',
+			showSidePanel && 'md:overflow-clip md:rounded-3xl',
+			queueOpen && showLyrics && 'md:hidden'
+		]}
+	>
+		<div
+			class={[
+				'h-full overflow-x-hidden overflow-y-auto overscroll-y-contain',
+				showSidePanel && 'inset-scrollbar'
+			]}
+		>
+			<div>
+				{@render children()}
+			</div>
+		</div>
+	</div>
+	<div class="hidden md:contents">
+		{#if queueOpen}
+			<Queue embedded onClose={() => (queueOpen = false)} />
+		{/if}
+		{#if showLyrics}
+			<Lyrics embedded onClose={() => (lyricsOpen = false)} />
+		{/if}
 	</div>
 </div>
 
 <div class="hidden md:block">
-	<BottomBar />
+	<BottomBar bind:lyricsOpen bind:queueOpen />
 </div>
 
 <div class="block md:hidden">

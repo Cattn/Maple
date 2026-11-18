@@ -47,6 +47,66 @@ body {
 	box-sizing: inherit;
 }
 
+@media (width >= 48rem) {
+	.inset-scrollbar {
+		--scrollbar-top-inset: 0.75rem;
+		margin-block: var(--scrollbar-top-inset) 0.75rem;
+		margin-inline: 0.25rem;
+		max-height: calc(100% - var(--scrollbar-top-inset) - 0.75rem);
+	}
+
+	.inset-scrollbar-bottom {
+		--scrollbar-top-inset: 0px;
+	}
+}
+
+@media (forced-colors: none) {
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	::-webkit-scrollbar-track,
+	::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+
+	::-webkit-scrollbar-thumb {
+		border: 2px solid transparent;
+		border-radius: 999px;
+		background: rgb(var(--m3-scheme-outline));
+		background-clip: padding-box;
+	}
+
+	::-webkit-scrollbar-thumb:hover {
+		background-color: rgb(var(--m3-scheme-on-surface-variant));
+	}
+
+	::-webkit-scrollbar-thumb:active {
+		background-color: rgb(var(--m3-scheme-primary));
+	}
+
+	@supports not selector(::-webkit-scrollbar) {
+		* {
+			scrollbar-width: thin;
+			scrollbar-color: rgb(var(--m3-scheme-outline)) transparent;
+		}
+	}
+}
+
+@media (width >= 48rem) and (forced-colors: none) {
+	@supports selector(::-webkit-scrollbar) {
+		.inset-scrollbar {
+			margin: 0;
+			max-height: none;
+		}
+
+		.inset-scrollbar::-webkit-scrollbar-track:vertical {
+			margin: calc(2 * var(--scrollbar-top-inset)) 0 1.5rem;
+		}
+	}
+}
+
 :root {
 	color-scheme: light;
 }

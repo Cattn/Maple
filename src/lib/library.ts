@@ -52,18 +52,28 @@ const PARSE_HEAD_BYTES = 2 * 1024 * 1024;
 const IMPORT_FLUSH_EVERY = 20;
 const IMPORT_TOAST_ID = 'library-import';
 
+function needsOggDuration(file: File) {
+	return (
+		/\.(opus|ogg|oga)$/i.test(file.name) ||
+		/^(?:audio\/(?:ogg|opus)|application\/ogg)(?:;|$)/i.test(file.type)
+	);
+}
+
 async function parseMetadataWithTimeout(
 	file: File,
 	timeoutMs: number = 30000
 ): Promise<Awaited<ReturnType<typeof parseBlob>> | null> {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
-		const timeoutPromise = new Promise<null>((_, reject) =>
-			setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs)
-		);
-		const parsePromise = parseBlob(file, { duration: false, skipPostHeaders: false });
+		const timeoutPromise = new Promise<null>((_, reject) => {
+			timeout = setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs);
+		});
+		const parsePromise = parseBlob(file, { duration: needsOggDuration(file), skipPostHeaders: false });
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
 		return null;
+	} finally {
+		clearTimeout(timeout);
 	}
 }
 
@@ -78,7 +88,13 @@ async function parseMetadataFast(file: File) {
 			{ mimeType: file.type || undefined, path: file.name, size: file.size },
 			{ duration: false, skipPostHeaders: false }
 		);
-		if (parsed?.common?.title || parsed?.common?.artist) return parsed;
+		if (parsed?.common?.title || parsed?.common?.artist) {
+			// A partial Ogg stream can report the duration of just the pages we read.
+			if (headBytes < file.size && needsOggDuration(file)) {
+				return { ...parsed, format: { ...parsed.format, duration: undefined } };
+			}
+			return parsed;
+		}
 	} catch {
 		/* fall through to full parse */
 	}
@@ -127,6 +143,7 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 
 					try {
 						const metadata = await parseMetadataFast(file);
+						const duration = metadata?.format.duration ?? 0;
 						const picture = metadata?.common.picture?.[0];
 						const cover = picture
 							? new Blob([picture.data.slice()], { type: picture.format })
@@ -142,13 +159,13 @@ export async function createLibrary(mobileFiles?: FileList | File[]): Promise<vo
 									? metadata.common.genre[0]
 									: metadata.common.genre
 								: 'Unknown Genre',
-							duration: metadata?.format.duration || 0,
+							duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
 							image: cover,
 							trackNumber: metadata?.common.track?.no ?? 0,
 							disk: metadata?.common.disk?.no ?? 0,
 							ext: file.name.split('.').pop() || 'mp3',
 							fileName: file.name,
-							lyrics: embeddedLyrics(metadata?.common.lyrics)
+							lyrics: metadata ? (embeddedLyrics(metadata.common.lyrics) ?? []) : undefined
 						};
 
 						const album: Album = {

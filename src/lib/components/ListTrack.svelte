@@ -332,28 +332,6 @@
 			style:left={`${menuPosition?.left ?? 0}px`}
 		>
 			<div class="bg-surface border-outline min-w-48 rounded-xl border py-2 shadow-2xl">
-				{#if track && UserSettings.preferences.addExternalLyrics}<ExternalLyrics
-						{track}
-						onDone={() => (showMenu = false)}
-					/>{/if}
-				<button
-					onclick={onRemove ? handleRemove : handleDelete}
-					class="text-on-surface hover:bg-surface-container-high flex w-full items-center px-4 py-3 text-left transition-colors duration-150"
-				>
-					<svg
-						class="mr-3 flex-shrink-0"
-						xmlns="http://www.w3.org/2000/svg"
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						><path
-							fill="currentColor"
-							d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2zM7 6v13z"
-						/></svg
-					>
-					<span class="text-sm font-medium">{onRemove ? 'Remove' : 'Delete'}</span>
-				</button>
-
 				<div class="relative">
 					<button
 						onmouseenter={handlePlaylistHover}
@@ -415,6 +393,26 @@
 						</div>
 					{/if}
 				</div>
+				{#if track && UserSettings.preferences.addExternalLyrics}
+					<ExternalLyrics {track} onDone={() => (showMenu = false)} />
+				{/if}
+				<button
+					onclick={onRemove ? handleRemove : handleDelete}
+					class="text-on-surface hover:bg-surface-container-high flex w-full items-center px-4 py-3 text-left transition-colors duration-150"
+				>
+					<svg
+						class="mr-3 flex-shrink-0"
+						xmlns="http://www.w3.org/2000/svg"
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						><path
+							fill="currentColor"
+							d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zM17 6H7v13h10zM9 17h2V8H9zm4 0h2V8h-2zM7 6v13z"
+						/></svg
+					>
+					<span class="text-sm font-medium">{onRemove ? 'Remove' : 'Delete'}</span>
+				</button>
 			</div>
 		</div>
 	{/if}
