@@ -17,11 +17,6 @@ body {
 	font-optical-sizing: auto;
 	font-style: normal;
 	min-height: 100vh;
-	--cp-bg-color: rgb(var(--m3-scheme-surface));
-	--cp-border-color: rgb(var(--m3-scheme-outline-variant));
-	--cp-text-color: rgb(var(--m3-scheme-on-surface));
-	--cp-input-color: rgb(var(--m3-scheme-surface-container-high));
-	--cp-button-hover-color: rgb(var(--m3-scheme-surface-container-highest));
 }
 
 .bg-surface-container-high {

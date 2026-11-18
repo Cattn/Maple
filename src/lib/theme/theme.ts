@@ -14,14 +14,14 @@ type ThemeSettings = {
 	isDarkMode: boolean;
 };
 
-const defaultSourceColor = '#8f4a4c';
+export const DEFAULT_SOURCE_COLOR = '#8f4a4c';
 const themeStorage = new Settings('theme');
 
 const getStoredTheme = () => {
 	if (!browser) {
-		return { sourceColor: defaultSourceColor, isDarkMode: false };
+		return { sourceColor: DEFAULT_SOURCE_COLOR, isDarkMode: false };
 	}
-	const sourceColor = themeStorage.get('sourceColor') ?? defaultSourceColor;
+	const sourceColor = themeStorage.get('sourceColor') ?? DEFAULT_SOURCE_COLOR;
 	const storedDarkMode = themeStorage.get('isDarkMode');
 	const isDarkMode =
 		storedDarkMode !== null
