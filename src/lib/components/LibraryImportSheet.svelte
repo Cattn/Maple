@@ -7,7 +7,7 @@
 		iosImportOpen,
 		IOS_AUDIO_ACCEPT,
 		isDirectoryPickerSupported,
-		isIOS,
+		isMobileImportPlatform,
 		isWebkitDirectorySupported,
 		pickLibraryDirectory,
 		pickLibraryFolder
@@ -27,13 +27,7 @@
 	let sheetDragStartY = 0;
 	const DISMISS_THRESHOLD = 120;
 
-	function isMobileSheetPlatform(): boolean {
-		if (isIOS()) return true;
-		if (typeof navigator === 'undefined') return false;
-		return /Android/i.test(navigator.userAgent);
-	}
-
-	let useSheet = $derived($iosImportOpen && isMobileSheetPlatform());
+	let useSheet = $derived($iosImportOpen && isMobileImportPlatform());
 	let directoryPickerAvailable = $derived($iosImportOpen && isDirectoryPickerSupported());
 	let webkitDirectoryAvailable = $derived($iosImportOpen && isWebkitDirectorySupported());
 	let canPickDirectory = $derived(directoryPickerAvailable || webkitDirectoryAvailable);

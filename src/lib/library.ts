@@ -1,5 +1,6 @@
 import { embeddedLyrics } from '$lib/lyrics';
 import { parseBlob, parseBuffer } from 'music-metadata';
+import { readOpusDuration } from '$lib/opus';
 import { IFS, type LinkedFolder } from '$lib/ifs';
 import { OPFS } from '$lib/opfs';
 import { toast } from 'svelte-sonner';
@@ -36,6 +37,10 @@ export function isDirectoryPickerSupported(): boolean {
 	return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 }
 
+export function isMobileImportPlatform(): boolean {
+	return isIOS() || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent));
+}
+
 export function isWebkitDirectorySupported(): boolean {
 	return typeof document !== 'undefined' && 'webkitdirectory' in document.createElement('input');
 }
@@ -51,6 +56,7 @@ function yieldToUI(): Promise<void> {
 
 const PARSE_HEAD_BYTES = 2 * 1024 * 1024;
 const IMPORT_FLUSH_EVERY = 20;
+const SMALL_IMPORT_LIMIT = 20;
 const IMPORT_TOAST_ID = 'library-import';
 
 function needsOggDuration(file: File) {
@@ -69,10 +75,15 @@ async function parseMetadataWithTimeout(
 		const timeoutPromise = new Promise<null>((_, reject) => {
 			timeout = setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs);
 		});
-		const parsePromise = parseBlob(file, {
-			duration: needsOggDuration(file),
-			skipPostHeaders: false
-		});
+		const parsePromise = (async () => {
+			const ogg = needsOggDuration(file);
+			const duration = ogg ? await readOpusDuration(file) : undefined;
+			const metadata = await parseBlob(file, {
+				duration: ogg && duration === undefined,
+				skipPostHeaders: false
+			});
+			return duration === undefined ? metadata : { ...metadata, format: { ...metadata.format, duration } };
+		})();
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
 		return null;
@@ -100,9 +111,9 @@ async function parseMetadataFast(file: File) {
 			return parsed;
 		}
 	} catch {
-		/* fall through to full parse */
+		return null;
 	}
-	return parseMetadataWithTimeout(file);
+	return null;
 }
 
 type LibraryFile = { file: File; source: SongSource };
@@ -182,6 +193,7 @@ async function importSelection(selection: File[] | FileSystemDirectoryHandle, ac
 		}
 
 		let processedCount = 0;
+		const mobile = isMobileImportPlatform();
 		let successCount = 0;
 		let skippedCount = 0;
 		const addedIds: string[] = [];
@@ -194,7 +206,8 @@ async function importSelection(selection: File[] | FileSystemDirectoryHandle, ac
 					continue;
 				}
 				processedCount++;
-				if (processedCount === 1 || processedCount === total || processedCount % 8 === 0) {
+				const perSong = mobile || (total ?? processedCount) <= SMALL_IMPORT_LIMIT;
+				if (perSong || processedCount === 1 || processedCount === total || processedCount % 8 === 0) {
 					const progress = total ? `${processedCount} of ${total}` : processedCount;
 					toast(`${progress} | Processing ${file.name}`, {
 						id: IMPORT_TOAST_ID
