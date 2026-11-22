@@ -131,7 +131,7 @@
 							/></svg
 						>
 					</Button>
-					<h1 class="text-on-secondary roboto-flex-home-link">Friends</h1>
+					<h1 class="text-on-secondary roboto-flex-home-link">Social</h1>
 				</div>
 				<div class="flex flex-col items-center justify-center">
 					<Button

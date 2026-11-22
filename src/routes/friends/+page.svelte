@@ -1,344 +1,1084 @@
 <script lang="ts">
-	import { Card, Button } from 'm3-svelte';
-	import { UserManager } from '$lib/api/UserManager';
-	import { friends, isLoggedIn, pendingRequests, title } from '$lib/store';
-	import { onMount } from 'svelte';
-	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
+	import { Button, Dialog } from 'm3-svelte';
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
-	import { toast } from 'svelte-sonner';
+	import { resolve } from '$app/paths';
+	import { onMount, tick, untrack } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { toast } from 'svelte-sonner';
+	import { UserManager } from '$lib/api/UserManager';
 	import { SERVER } from '$lib/api/server';
-	import type { Friend } from '$lib/types';
+	import { confirmDialog } from '$lib/confirm.svelte';
+	import { refreshFriends, refreshRequests } from '$lib/refreshFriends';
+	import { friends, isLoggedIn, pendingRequests, SavedUser, socket, title } from '$lib/store';
+	import type { Friend, Profile } from '$lib/types';
 
+	const REQUESTS_HIDDEN_KEY = 'friends.requestsHidden';
+
+	function readRequestsExpanded() {
+		if (!browser) return true;
+		try {
+			return localStorage.getItem(REQUESTS_HIDDEN_KEY) !== 'true';
+		} catch {
+			return true;
+		}
+	}
+
+	let searchQuery = $state('');
+	let requestsExpanded = $state(readRequestsExpanded());
+
+	function toggleRequestsExpanded() {
+		requestsExpanded = !requestsExpanded;
+		if (!browser) return;
+		try {
+			if (requestsExpanded) localStorage.removeItem(REQUESTS_HIDDEN_KEY);
+			else localStorage.setItem(REQUESTS_HIDDEN_KEY, 'true');
+		} catch {}
+	}
+
+	let addDialogOpen = $state(false);
+	let addInputEl: HTMLInputElement | undefined = $state();
 	let selectedFriend = $state('');
 	let addingFriend = $state(false);
-	const pfpErrors = $state(new Set<string>());
-	const artErrors = new SvelteSet<string>();
+	let addFeedback = $state<{ tone: 'error' | 'success'; message: string } | null>(null);
 
-	onMount(async () => {
-		title.set('Friends');
-		await refreshRequests();
-		await refreshFriends();
+	let refreshing = $state(false);
+	let hasLoadedOnce = $state(false);
+	let copiedUsername = $state(false);
+	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+	let nowMs = $state(Date.now());
+
+	const pfpErrors = new SvelteSet<string>();
+	const artErrors = new SvelteSet<string>();
+	const busyUsers = new SvelteSet<string>();
+
+	const AVATAR_TONES = [
+		'bg-primary-container text-on-primary-container',
+		'bg-secondary-container text-on-secondary-container',
+		'bg-tertiary-container text-on-tertiary-container'
+	] as const;
+
+	function avatarTone(id: string) {
+		let hash = 0;
+		for (let i = 0; i < id.length; i++) {
+			hash = (hash * 31 + id.charCodeAt(i)) | 0;
+		}
+		return AVATAR_TONES[Math.abs(hash) % AVATAR_TONES.length];
+	}
+
+	function displayName(profile: Pick<Profile, 'name' | 'username'>) {
+		return profile.name?.trim() || profile.username;
+	}
+
+	function initialsFor(profile: Pick<Profile, 'name' | 'username'>) {
+		const label = displayName(profile).trim();
+		return label ? label[0].toUpperCase() : '?';
+	}
+
+	function pfpUrl(id: string) {
+		return `${SERVER}/public/get/pfp/${encodeURIComponent(id)}`;
+	}
+
+	function artworkUrl(friend: Friend) {
+		const id = friend.listening?.current
+			? friend.listening.current.artwork
+			: friend.listening?.lastPlayed?.artwork;
+		return id
+			? `${SERVER}/public/get/albumArt/${encodeURIComponent(friend.id)}/${encodeURIComponent(id)}`
+			: undefined;
+	}
+
+	function formatShortTime(iso: string | null | undefined, now: number): string | null {
+		if (!iso) return null;
+		const parsed = Date.parse(iso);
+		if (!Number.isFinite(parsed)) return null;
+		const diffSeconds = Math.max(0, Math.floor((now - parsed) / 1000));
+		if (diffSeconds < 60) return 'now';
+		const minutes = Math.floor(diffSeconds / 60);
+		if (minutes < 60) return `${minutes}m`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h`;
+		const days = Math.floor(hours / 24);
+		if (days < 7) return `${days}d`;
+		return new Date(parsed).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	}
+
+	function compareByName(a: Profile, b: Profile) {
+		return displayName(a).localeCompare(displayName(b), undefined, { sensitivity: 'base' });
+	}
+
+	let incomingRequests = $derived($pendingRequests.incoming);
+	let outgoingRequests = $derived($pendingRequests.outgoing);
+	let incomingCount = $derived(incomingRequests.length);
+	let totalRequestCount = $derived(incomingRequests.length + outgoingRequests.length);
+
+	let activeListenerCount = $derived(
+		$friends.filter((friend) => Boolean(friend.listening?.current)).length
+	);
+
+	let normalizedQuery = $derived(searchQuery.trim().toLowerCase());
+
+	let filteredFriends = $derived.by(() => {
+		if (!normalizedQuery) return $friends;
+		const queryNoAt = normalizedQuery.replace(/^@+/, '');
+		return $friends.filter((friend) => {
+			const nameMatch = friend.name?.toLowerCase().includes(normalizedQuery);
+			const userMatch = friend.username.toLowerCase().includes(queryNoAt);
+			const current = friend.listening?.current;
+			const last = friend.listening?.lastPlayed;
+			const trackMatch =
+				current?.title.toLowerCase().includes(normalizedQuery) ||
+				current?.artist.toLowerCase().includes(normalizedQuery) ||
+				current?.album.toLowerCase().includes(normalizedQuery) ||
+				last?.title.toLowerCase().includes(normalizedQuery) ||
+				last?.artist.toLowerCase().includes(normalizedQuery);
+			return Boolean(nameMatch || userMatch || trackMatch);
+		});
 	});
 
-	async function addFriend() {
-		if (!selectedFriend.trim()) return;
+	let filteredListening = $derived(
+		filteredFriends
+			.filter((friend) => Boolean(friend.listening?.current))
+			.sort((a, b) => {
+				const playingDiff =
+					Number(Boolean(b.listening?.current?.playing)) -
+					Number(Boolean(a.listening?.current?.playing));
+				return playingDiff !== 0 ? playingDiff : compareByName(a, b);
+			})
+	);
+
+	let filteredOther = $derived(
+		filteredFriends.filter((friend) => !friend.listening?.current).sort(compareByName)
+	);
+
+	// Add-friend smart pre-checks (case-insensitive to match server COLLATE NOCASE)
+	let cleanedAddUsername = $derived(selectedFriend.trim().replace(/^@+/, ''));
+	let cleanedAddLower = $derived(cleanedAddUsername.toLowerCase());
+
+	let isSelfUsername = $derived(
+		Boolean(cleanedAddLower && $SavedUser?.username?.toLowerCase() === cleanedAddLower)
+	);
+	let matchingFriend = $derived(
+		cleanedAddLower
+			? $friends.find((friend) => friend.username.toLowerCase() === cleanedAddLower)
+			: undefined
+	);
+	let matchingOutgoing = $derived(
+		cleanedAddLower
+			? outgoingRequests.find((user) => user.username.toLowerCase() === cleanedAddLower)
+			: undefined
+	);
+	let matchingIncoming = $derived(
+		cleanedAddLower
+			? incomingRequests.find((user) => user.username.toLowerCase() === cleanedAddLower)
+			: undefined
+	);
+
+	let canSubmitAdd = $derived(
+		Boolean(
+			cleanedAddUsername &&
+			!addingFriend &&
+			!isSelfUsername &&
+			!matchingFriend &&
+			!matchingOutgoing &&
+			!matchingIncoming
+		)
+	);
+
+	async function openAddDialog() {
+		addFeedback = null;
+		addDialogOpen = true;
+		await tick();
+		addInputEl?.focus();
+	}
+
+	function closeAddDialog() {
+		addDialogOpen = false;
+		addFeedback = null;
+	}
+
+	async function refreshAll(manual = false) {
+		if (refreshing || !$SavedUser?.id) return;
+		refreshing = true;
+		if (manual) {
+			pfpErrors.clear();
+			artErrors.clear();
+		}
+		try {
+			await Promise.all([refreshRequests(), refreshFriends()]);
+			hasLoadedOnce = true;
+		} finally {
+			refreshing = false;
+		}
+	}
+
+	// Fetch friends & requests whenever the signed-in account becomes available
+	let lastLoadedAccountId = '';
+	$effect(() => {
+		const accountId = $isLoggedIn ? ($SavedUser?.id ?? '') : '';
+		if (!accountId) {
+			lastLoadedAccountId = '';
+			hasLoadedOnce = false;
+			searchQuery = '';
+			selectedFriend = '';
+			addFeedback = null;
+			addDialogOpen = false;
+			return;
+		}
+		if (accountId !== lastLoadedAccountId) {
+			lastLoadedAccountId = accountId;
+			untrack(() => {
+				void refreshAll();
+			});
+		}
+	});
+
+	async function handleAddFriend(event: SubmitEvent) {
+		event.preventDefault();
+		if (!canSubmitAdd) return;
+
 		addingFriend = true;
-		const user = await UserManager.getUserName(selectedFriend.trim());
-		const result = user ? await UserManager.addFriend(user.id) : { error: 'User not found' };
-		if ('error' in result) toast.error('Friend request failed: ' + result.error);
-		else selectedFriend = '';
-		await refreshRequests();
-		addingFriend = false;
+		addFeedback = null;
+		const usernameQuery = cleanedAddUsername;
+		try {
+			const user = await UserManager.getUserName(usernameQuery);
+			if (!user) {
+				addFeedback = {
+					tone: 'error',
+					message: `No account found for @${usernameQuery}.`
+				};
+				return;
+			}
+			const result = await UserManager.addFriend(user.id);
+			if ('error' in result) {
+				addFeedback = { tone: 'error', message: result.error };
+				toast.error(result.error);
+			} else {
+				selectedFriend = '';
+				addDialogOpen = false;
+				toast.success(`Friend request sent to @${user.username}.`);
+				await refreshRequests();
+			}
+		} finally {
+			addingFriend = false;
+		}
 	}
 
-	async function update(change: Promise<{ success: true } | { error: string }>) {
-		const result = await change;
-		if ('error' in result) toast.error(result.error);
-		await Promise.all([refreshRequests(), refreshFriends()]);
+	async function runUserAction(
+		userId: string,
+		action: () => Promise<{ success: true } | { error: string }>,
+		onSuccess?: () => void
+	) {
+		if (busyUsers.has(userId)) return;
+		busyUsers.add(userId);
+		try {
+			const result = await action();
+			if ('error' in result) {
+				toast.error(result.error);
+			} else {
+				onSuccess?.();
+			}
+			await Promise.all([refreshRequests(), refreshFriends()]);
+		} finally {
+			busyUsers.delete(userId);
+		}
 	}
 
-	const acceptRequest = (userId: string) => update(UserManager.acceptRequest(userId));
-	const rejectRequest = (userId: string) => update(UserManager.rejectRequest(userId));
-	const removeFriend = (friendId: string) => update(UserManager.removeFriend(friendId));
-
-	function listeningText(friend: Friend) {
-		const current = friend.listening?.current;
-		if (current) return current.title + ' - ' + (current.artist || 'Unknown Artist');
-		const last = friend.listening?.lastPlayed;
-		if (last) return 'Last played ' + last.title + ' - ' + (last.artist || 'Unknown Artist');
+	function acceptRequest(user: Profile) {
+		const socketConnected = Boolean($socket?.connected);
+		return runUserAction(
+			user.id,
+			() => UserManager.acceptRequest(user.id),
+			() => {
+				if (cleanedAddLower === user.username.toLowerCase()) {
+					selectedFriend = '';
+					addDialogOpen = false;
+				}
+				if (!socketConnected) {
+					toast.success(`You are now friends with ${displayName(user)}.`);
+				}
+			}
+		);
 	}
 
-	function artwork(friend: Friend) {
-		const id = friend.listening?.current?.artwork ?? friend.listening?.lastPlayed?.artwork;
-		return id ? `${SERVER}/public/get/albumArt/${friend.id}/${id}` : undefined;
+	function rejectRequest(user: Profile, incoming: boolean) {
+		return runUserAction(
+			user.id,
+			() => UserManager.rejectRequest(user.id),
+			() => {
+				toast.success(
+					incoming
+						? `Declined request from @${user.username}.`
+						: `Cancelled request to @${user.username}.`
+				);
+			}
+		);
 	}
+
+	async function removeFriend(friend: Friend) {
+		const label = displayName(friend);
+		const confirmed = await confirmDialog({
+			headline: `Remove ${label}?`,
+			message: `You’ll stop seeing each other’s listening activity. You can add @${friend.username} again anytime.`,
+			confirmLabel: 'Remove'
+		});
+		if (!confirmed) return;
+
+		await runUserAction(
+			friend.id,
+			() => UserManager.removeFriend(friend.id),
+			() => {
+				toast.success(`Removed ${label}.`);
+			}
+		);
+	}
+
+	async function copyOwnUsername() {
+		const username = $SavedUser?.username;
+		if (!username) return;
+		try {
+			await navigator.clipboard.writeText(username);
+			copiedUsername = true;
+			toast.success(`Copied @${username}.`);
+			clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => {
+				copiedUsername = false;
+			}, 2000);
+		} catch {
+			toast.error('Could not copy username.');
+		}
+	}
+
+	onMount(() => {
+		title.set('Social');
+		const timer = setInterval(() => {
+			nowMs = Date.now();
+		}, 60_000);
+		return () => {
+			clearInterval(timer);
+			clearTimeout(copyTimer);
+		};
+	});
 </script>
 
-<div class="flex w-full justify-center px-4 py-12">
-	<div class="flex w-full max-w-4xl flex-col gap-8">
-		{#if !$isLoggedIn}
-			<div class="flex flex-col items-center justify-center gap-4 py-16">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="64"
-					height="64"
-					viewBox="0 0 24 24"
-					class="text-on-surface-variant"
-				>
-					<path
-						fill="currentColor"
-						d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
-					/>
-				</svg>
-				<h1 class="text-2xl font-bold">You're not logged in</h1>
-				<p class="text-on-surface-variant text-sm">Login to manage your friends</p>
-				<Button variant="filled" onclick={() => goto('/login')}>Login</Button>
-			</div>
-		{:else}
-			<div class="flex flex-col gap-1">
-				<p class="text-on-surface-variant text-xs tracking-[0.16em] uppercase">Social</p>
-				<h1 class="text-4xl font-black">Friends</h1>
-				<p class="text-on-surface-variant text-sm">Manage your friends and friend requests</p>
-			</div>
+{#snippet avatar(
+	profile: Pick<Profile, 'id' | 'name' | 'username'>,
+	sizeClass = 'h-10 w-10',
+	textClass = 'text-sm'
+)}
+	{#if !pfpErrors.has(profile.id)}
+		<img
+			src={pfpUrl(profile.id)}
+			alt={displayName(profile)}
+			class={[sizeClass, 'shrink-0 rounded-full object-cover']}
+			onerror={() => pfpErrors.add(profile.id)}
+		/>
+	{:else}
+		<div
+			class={[
+				sizeClass,
+				textClass,
+				avatarTone(profile.id),
+				'flex shrink-0 items-center justify-center rounded-full font-bold select-none'
+			]}
+			aria-hidden="true"
+		>
+			{initialsFor(profile)}
+		</div>
+	{/if}
+{/snippet}
 
-			<section class="flex flex-col gap-3">
-				<div class="flex flex-col gap-1">
-					<p class="text-on-surface-variant text-xs tracking-[0.16em] uppercase">Add Friend</p>
-					<p class="text-on-surface-variant text-sm">Enter a username to send a friend request</p>
+{#if !$isLoggedIn}
+	<!-- Minimal, music-native signed-out screen -->
+	<div class="flex min-h-[calc(100vh-14rem)] w-full items-center justify-center px-6 py-12">
+		<div class="flex max-w-sm flex-col items-center text-center">
+			<!-- Overlapping Material You listener cluster -->
+			<div class="mb-7 flex items-center justify-center" aria-hidden="true">
+				<div
+					class="bg-secondary-container text-on-secondary-container ring-background -mr-3.5 flex h-14 w-14 -rotate-6 items-center justify-center rounded-full ring-4"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+						<path
+							fill="currentColor"
+							d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
+						/>
+					</svg>
 				</div>
 
-				<Card variant="outlined" class="p-6">
-					<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-						<div class="flex items-center gap-3">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="24"
-								height="24"
-								viewBox="0 0 24 24"
-								class="text-primary"
-							>
-								<path
-									fill="currentColor"
-									d="M15 14q-.625 0-1.062-.437T13.5 12.5t.438-1.062T15 11t1.063.438t.437 1.062t-.437 1.063T15 14m-6 0q-.625 0-1.062-.437T7.5 12.5t.438-1.062T9 11t1.063.438t.437 1.062t-.437 1.063T9 14m3 8q-2.075 0-3.9-.788t-3.175-2.137T2.788 15.9T2 12t.788-3.9t2.137-3.175T8.1 2.788T12 2t3.9.788t3.175 2.137T21.213 8.1T22 12t-.788 3.9t-2.137 3.175t-3.175 2.138T12 22"
-								/>
-							</svg>
-						</div>
-						<input
-							type="text"
-							bind:value={selectedFriend}
-							placeholder="Enter username"
-							class="bg-surface text-on-surface placeholder:text-on-surface-variant/70 ring-outline focus:ring-primary flex-1 rounded-lg px-3 py-2 ring-1 focus:ring-2 focus:outline-none"
+				<div
+					class="bg-primary-container text-on-primary-container ring-background z-10 flex h-18 w-18 items-center justify-center rounded-full shadow-sm ring-4"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+						<path
+							fill="currentColor"
+							d="M12 3a9 9 0 0 0-9 9v7q0 .825.588 1.413T5 21h4v-8H5v-1q0-2.925 2.038-4.962T12 5t4.963 2.038T19 12v1h-4v8h4q.825 0 1.413-.587T21 19v-7a9 9 0 0 0-9-9"
 						/>
-						<Button
-							variant="filled"
-							onclick={addFriend}
-							disabled={addingFriend || !selectedFriend.trim()}
+					</svg>
+				</div>
+
+				<div
+					class="bg-tertiary-container text-on-tertiary-container ring-background -ml-3.5 flex h-14 w-14 rotate-6 items-center justify-center rounded-full ring-4"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<path
+							fill="currentColor"
+							d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
+						/>
+					</svg>
+				</div>
+			</div>
+
+			<h1 class="text-on-surface text-2xl font-bold tracking-tight sm:text-3xl">
+				See what friends are playing
+			</h1>
+			<p class="text-on-surface-variant mt-2.5 text-sm leading-relaxed">
+				Sign in to add friends by username and share what you’re listening to.
+			</p>
+
+			<div class="mt-7 flex flex-wrap items-center justify-center gap-3">
+				<Button variant="filled" onclick={() => goto(resolve('/login'))}>Sign in</Button>
+				<Button variant="tonal" onclick={() => goto(resolve('/register'))}>Create account</Button>
+			</div>
+		</div>
+	</div>
+{:else}
+	<div class="mx-auto w-full max-w-5xl px-4 pt-6 pb-28 sm:px-6 sm:pt-10 md:pb-12 lg:px-8">
+		<!-- Clean Header -->
+		<header class="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="flex items-baseline gap-3">
+				<h1 class="text-on-surface text-3xl font-black tracking-tight sm:text-4xl">Social</h1>
+				{#if activeListenerCount > 0}
+					<span
+						class="text-on-surface-variant inline-flex items-center gap-1.5 text-xs font-medium"
+					>
+						<span class="bg-primary h-1.5 w-1.5 rounded-full"></span>
+						{activeListenerCount} listening
+					</span>
+				{/if}
+			</div>
+
+			<div class="flex items-center gap-2">
+				{#if $friends.length > 0}
+					<div
+						class="bg-surface-container focus-within:bg-surface-container-high flex min-w-0 flex-1 items-center gap-2 rounded-full px-3.5 transition-colors sm:w-52 sm:flex-initial sm:focus-within:w-64"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							class="text-on-surface-variant shrink-0"
+							aria-hidden="true"
 						>
-							{#if addingFriend}
-								Sending...
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="20"
-									height="20"
-									viewBox="0 0 24 24"
-									class="mr-2"
-								>
+							<path
+								fill="currentColor"
+								d="m19.6 21l-6.3-6.3q-.75.6-1.725.95T9.5 16q-2.725 0-4.612-1.888T3 9.5t1.888-4.612T9.5 3t4.613 1.888T16 9.5q0 1.1-.35 2.075T14.7 13.3l6.3 6.3zM9.5 14q1.875 0 3.188-1.312T14 9.5t-1.312-3.187T9.5 5T6.313 6.313T5 9.5t1.313 3.188T9.5 14"
+							/>
+						</svg>
+						<input
+							type="search"
+							bind:value={searchQuery}
+							placeholder="Search..."
+							aria-label="Search friends or tracks"
+							class="text-on-surface placeholder:text-on-surface-variant/65 w-full border-none bg-transparent py-2 text-sm outline-none"
+						/>
+						{#if searchQuery}
+							<button
+								type="button"
+								onclick={() => (searchQuery = '')}
+								aria-label="Clear search"
+								class="text-on-surface-variant hover:text-on-surface flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
 									<path
 										fill="currentColor"
-										d="M18 14v-3h-3V9h3V6h2v3h3v2h-3v3zm-9-2q-1.65 0-2.825-1.175T5 8t1.175-2.825T9 4t2.825 1.175T13 8t-1.175 2.825T9 12m-8 8v-2.8q0-.85.438-1.562T2.6 14.55q1.55-.775 3.15-1.162T9 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T17 17.2V20z"
+										d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
 									/>
 								</svg>
-								Add Friend
-							{/if}
-						</Button>
+							</button>
+						{/if}
 					</div>
-				</Card>
-			</section>
+				{/if}
 
-			{#if $pendingRequests.incoming.length > 0 || $pendingRequests.outgoing.length > 0}
-				<section class="flex flex-col gap-3">
-					<div class="flex flex-col gap-1">
-						<p class="text-on-surface-variant text-xs tracking-[0.16em] uppercase">
-							Friend Requests
-						</p>
-						<p class="text-on-surface-variant text-sm">People who want to be your friend</p>
+				<button
+					type="button"
+					onclick={() => refreshAll(true)}
+					disabled={refreshing}
+					aria-label="Refresh friends"
+					title="Refresh"
+					class="text-on-surface-variant hover:bg-surface-container hover:text-on-surface flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent transition-colors disabled:opacity-50"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						class={refreshing ? 'animate-spin' : ''}
+					>
+						<path
+							fill="currentColor"
+							d="M12 20q-3.35 0-5.675-2.325T4 12t2.325-5.675T12 4q1.725 0 3.3.712T18 6.75V4h2v7h-7V9h4.2q-.8-1.4-2.187-2.2T12 6Q9.5 6 7.75 7.75T6 12t1.75 4.25T12 18q1.925 0 3.475-1.1T17.65 14h2.1q-.7 2.65-2.85 4.325T12 20"
+						/>
+					</svg>
+				</button>
+
+				<div class="shrink-0">
+					<Button variant="filled" onclick={openAddDialog}>Add friend</Button>
+				</div>
+			</div>
+		</header>
+
+		<div class="flex flex-col gap-9">
+			<!-- Compact Requests Strip (only when requests exist) -->
+			{#if totalRequestCount > 0}
+				<section aria-label="Friend requests" class="flex flex-col gap-3">
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<h2 class="text-on-surface-variant text-sm font-semibold">Requests</h2>
+							<span
+								class={[
+									'rounded-full px-2 py-0.5 text-[11px] leading-none font-bold',
+									incomingCount > 0
+										? 'bg-primary text-on-primary'
+										: 'bg-surface-container-high text-on-surface-variant'
+								]}
+							>
+								{totalRequestCount}
+							</span>
+						</div>
+
+						<button
+							type="button"
+							onclick={toggleRequestsExpanded}
+							class="text-on-surface-variant hover:text-on-surface cursor-pointer border-none bg-transparent text-xs font-medium transition-colors"
+						>
+							{requestsExpanded ? 'Hide' : 'Show'}
+						</button>
 					</div>
 
-					<Card variant="outlined" class="p-6">
-						<div class="flex flex-col gap-4">
-							{#each [...$pendingRequests.incoming.map( (user) => ({ user, incoming: true }) ), ...$pendingRequests.outgoing.map( (user) => ({ user, incoming: false }) )] as { user, incoming } (user.id)}
+					{#if requestsExpanded}
+						<div
+							transition:slide={{ duration: 180 }}
+							class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3"
+						>
+							{#each incomingRequests as user (user.id)}
+								{@const isBusy = busyUsers.has(user.id)}
+								{@const label = displayName(user)}
 								<div
-									class="bg-surface-container-high flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between"
+									class="bg-secondary-container/45 flex items-center justify-between gap-3 rounded-2xl px-3.5 py-2.5"
 								>
-									<div class="flex items-center gap-4">
-										{#if !pfpErrors.has(user.id)}
-											<img
-												src={`${SERVER}/public/get/pfp/${user.id}`}
-												alt="Profile"
-												class="h-12 w-12 rounded-full object-cover"
-												onerror={() => pfpErrors.add(user.id)}
-											/>
-										{:else}
-											<div
-												class="bg-primary/20 text-primary flex h-12 w-12 items-center justify-center rounded-full"
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="24"
-													height="24"
-													viewBox="0 0 24 24"
-												>
-													<path
-														fill="currentColor"
-														d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
-													/>
-												</svg>
-											</div>
-										{/if}
-										<div>
-											<h3 class="text-on-surface font-semibold">
-												{user.name || user.username}
-											</h3>
-											<p class="text-on-surface-variant text-sm">
-												@{user.username}{incoming ? '' : ' · Request sent'}
+									<div class="flex min-w-0 items-center gap-2.5">
+										{@render avatar(user, 'h-9 w-9', 'text-xs')}
+										<div class="min-w-0">
+											<p class="text-on-surface truncate text-sm font-semibold" title={label}>
+												{label}
 											</p>
+											<p class="text-on-surface-variant truncate text-xs">@{user.username}</p>
 										</div>
 									</div>
-									<div class="flex items-center gap-2">
-										{#if incoming}
-											<Button variant="filled" onclick={() => acceptRequest(user.id)}>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="20"
-													height="20"
-													viewBox="0 0 24 24"
-													class="mr-1"
-												>
-													<path
-														fill="currentColor"
-														d="m9 16.2l-3.5-3.5a.984.984 0 0 0-1.4 0a.984.984 0 0 0 0 1.4l4.19 4.19c.39.39 1.02.39 1.41 0L20.3 7.7a.984.984 0 0 0 0-1.4a.984.984 0 0 0-1.4 0z"
-													/>
-												</svg>
-												Accept
-											</Button>
-										{/if}
-										<Button variant="outlined" onclick={() => rejectRequest(user.id)}>
+
+									<div class="flex shrink-0 items-center gap-1">
+										<button
+											type="button"
+											onclick={() => acceptRequest(user)}
+											disabled={isBusy}
+											class="bg-primary text-on-primary hover:bg-primary/90 h-8 cursor-pointer rounded-full border-none px-3 text-xs font-semibold transition-colors disabled:opacity-50"
+										>
+											Accept
+										</button>
+										<button
+											type="button"
+											onclick={() => rejectRequest(user, true)}
+											disabled={isBusy}
+											aria-label={`Decline ${label}`}
+											title="Decline"
+											class="text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-none bg-transparent transition-colors disabled:opacity-50"
+										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
-												width="20"
-												height="20"
+												width="16"
+												height="16"
 												viewBox="0 0 24 24"
-												class="mr-1"
 											>
 												<path
 													fill="currentColor"
-													d="M18.3 5.71a.996.996 0 0 0-1.41 0L12 10.59L7.11 5.7A.996.996 0 1 0 5.7 7.11L10.59 12L5.7 16.89a.996.996 0 1 0 1.41 1.41L12 13.41l4.89 4.89a.996.996 0 1 0 1.41-1.41L13.41 12l4.89-4.89c.38-.38.38-1.02 0-1.4"
+													d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
 												/>
 											</svg>
-											{incoming ? 'Decline' : 'Cancel'}
-										</Button>
+										</button>
 									</div>
 								</div>
 							{/each}
+
+							{#each outgoingRequests as user (user.id)}
+								{@const isBusy = busyUsers.has(user.id)}
+								{@const label = displayName(user)}
+								<div
+									class="bg-surface-container-low flex items-center justify-between gap-3 rounded-2xl px-3.5 py-2.5"
+								>
+									<div class="flex min-w-0 items-center gap-2.5">
+										{@render avatar(user, 'h-9 w-9', 'text-xs')}
+										<div class="min-w-0">
+											<p class="text-on-surface truncate text-sm font-semibold" title={label}>
+												{label}
+											</p>
+											<p class="text-on-surface-variant truncate text-xs">
+												@{user.username} · Sent
+											</p>
+										</div>
+									</div>
+
+									<button
+										type="button"
+										onclick={() => rejectRequest(user, false)}
+										disabled={isBusy}
+										aria-label={`Cancel request to ${label}`}
+										title="Cancel request"
+										class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent transition-colors disabled:opacity-50"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+										>
+											<path
+												fill="currentColor"
+												d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
+											/>
+										</svg>
+									</button>
+								</div>
+							{/each}
 						</div>
-					</Card>
+					{/if}
 				</section>
 			{/if}
 
-			<section class="flex flex-col gap-3">
-				<div class="flex flex-col gap-1">
-					<p class="text-on-surface-variant text-xs tracking-[0.16em] uppercase">Your Friends</p>
-					<p class="text-on-surface-variant text-sm">People you're connected with</p>
+			<!-- Main Friends Content -->
+			{#if refreshing && !hasLoadedOnce && $friends.length === 0}
+				<div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading">
+					{#each [0, 1, 2] as item (item)}
+						<div class="bg-surface-container flex animate-pulse flex-col gap-4 rounded-3xl p-4">
+							<div class="flex items-center gap-2.5">
+								<div class="bg-surface-container-highest h-8 w-8 rounded-full"></div>
+								<div class="bg-surface-container-highest h-3.5 w-24 rounded-full"></div>
+							</div>
+							<div class="flex items-center gap-3.5">
+								<div class="bg-surface-container-highest h-16 w-16 rounded-2xl"></div>
+								<div class="flex flex-1 flex-col gap-2">
+									<div class="bg-surface-container-highest h-4 w-32 rounded-full"></div>
+									<div class="bg-surface-container-highest h-3 w-20 rounded-full"></div>
+								</div>
+							</div>
+						</div>
+					{/each}
 				</div>
+			{:else if $friends.length === 0}
+				<div class="flex flex-col items-center justify-center py-16 text-center">
+					<div
+						class="bg-surface-container text-on-surface-variant mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24">
+							<path
+								fill="currentColor"
+								d="M12 3a9 9 0 0 0-9 9v7q0 .825.588 1.413T5 21h4v-8H5v-1q0-2.925 2.038-4.962T12 5t4.963 2.038T19 12v1h-4v8h4q.825 0 1.413-.587T21 19v-7a9 9 0 0 0-9-9"
+							/>
+						</svg>
+					</div>
+					<p class="text-on-surface text-lg font-bold">No friends yet</p>
+					<p class="text-on-surface-variant mt-1 max-w-xs text-sm">
+						Add someone by username to see what they’re playing.
+					</p>
+					<div class="mt-5">
+						<Button variant="filled" onclick={openAddDialog}>Add friend</Button>
+					</div>
+				</div>
+			{:else if filteredFriends.length === 0}
+				<div class="flex flex-col items-center justify-center gap-3 py-14 text-center">
+					<p class="text-on-surface-variant text-sm">
+						No friends matching “{searchQuery.trim()}”.
+					</p>
+					<Button variant="text" onclick={() => (searchQuery = '')}>Clear search</Button>
+				</div>
+			{:else}
+				<!-- Listening Now Showcase Cards -->
+				{#if filteredListening.length > 0}
+					<section aria-label="Listening now" class="flex flex-col gap-3.5">
+						<div class="flex items-center gap-2">
+							<span class="bg-primary h-2 w-2 rounded-full"></span>
+							<h2 class="text-on-surface-variant text-sm font-semibold">Listening now</h2>
+						</div>
 
-				<Card variant="outlined" class="p-6">
-					{#if $friends && $friends.length > 0}
-						<div class="flex flex-col gap-4">
-							{#each $friends as friend}
-								<div
-									class="bg-surface-container-high flex flex-col gap-4 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between"
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+							{#each filteredListening as friend (friend.id)}
+								{@const current = friend.listening!.current!}
+								{@const art = artworkUrl(friend)}
+								{@const label = displayName(friend)}
+								{@const isBusy = busyUsers.has(friend.id)}
+
+								<article
+									class="group bg-surface-container hover:bg-surface-container-high relative flex flex-col gap-4 overflow-hidden rounded-[1.75rem] p-4 transition-colors"
 								>
-									<div class="flex min-w-0 items-center gap-4">
-										{#if !pfpErrors.has(friend.id)}
-											<img
-												src={`${SERVER}/public/get/pfp/${friend.id}`}
-												alt="Profile"
-												class="h-12 w-12 flex-shrink-0 rounded-full object-cover"
-												onerror={() => pfpErrors.add(friend.id)}
-											/>
-										{:else}
-											<div
-												class="bg-primary/20 text-primary flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full"
+									{#if art && !artErrors.has(art)}
+										<img
+											src={art}
+											alt=""
+											aria-hidden="true"
+											class="pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full object-cover opacity-20 blur-2xl dark:opacity-25"
+										/>
+									{/if}
+
+									<!-- Friend header -->
+									<div class="relative flex items-center justify-between gap-2">
+										<div class="flex min-w-0 items-center gap-2.5">
+											{@render avatar(friend, 'h-8 w-8', 'text-xs')}
+											<span
+												class="text-on-surface truncate text-sm font-semibold"
+												title={`${label} (@${friend.username})`}
+											>
+												{label}
+											</span>
+										</div>
+
+										<div class="flex shrink-0 items-center gap-1.5">
+											{#if current.playing}
+												<span class="eq-bars" aria-label="Playing" title="Playing">
+													<span></span>
+													<span></span>
+													<span></span>
+												</span>
+											{:else}
+												<span class="text-on-surface-variant/80 text-[11px] font-medium">
+													Paused
+												</span>
+											{/if}
+
+											<button
+												type="button"
+												onclick={() => removeFriend(friend)}
+												disabled={isBusy}
+												aria-label={`Remove ${label}`}
+												title={`Remove ${label}`}
+												class="text-on-surface-variant hover:bg-error-container/60 hover:text-error flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-none bg-transparent opacity-70 transition-all focus-visible:opacity-100 disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100"
 											>
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
-													width="24"
-													height="24"
+													width="16"
+													height="16"
 													viewBox="0 0 24 24"
 												>
 													<path
 														fill="currentColor"
-														d="M12 12q-1.65 0-2.825-1.175T8 8t1.175-2.825T12 4t2.825 1.175T16 8t-1.175 2.825T12 12m-8 8v-2.8q0-.85.438-1.562T5.6 14.55q1.55-.775 3.15-1.162T12 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T20 17.2V20z"
+														d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
+													/>
+												</svg>
+											</button>
+										</div>
+									</div>
+
+									<!-- Track focus -->
+									<div class="relative flex items-center gap-3.5">
+										{#if art && !artErrors.has(art)}
+											<img
+												src={art}
+												alt={`${current.title} album art`}
+												class="h-16 w-16 shrink-0 rounded-2xl object-cover shadow-sm"
+												onerror={() => artErrors.add(art)}
+											/>
+										{:else}
+											<div
+												class="bg-primary-container/75 text-on-primary-container flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl"
+												aria-hidden="true"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="26"
+													height="26"
+													viewBox="0 0 24 24"
+												>
+													<path
+														fill="currentColor"
+														d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
 													/>
 												</svg>
 											</div>
 										{/if}
+
 										<div class="min-w-0 flex-1">
-											<h3 class="text-on-surface truncate font-semibold">
-												{friend.name || friend.username}
-											</h3>
-											<p class="text-on-surface-variant truncate text-sm">@{friend.username}</p>
-											{#if listeningText(friend)}
-												{@const art = artwork(friend)}
-												<div class="mt-1 flex items-center gap-2">
-													{#if art && !artErrors.has(art)}
-														<img
-															src={art}
-															alt="Album art"
-															class="h-4 w-4 flex-shrink-0 rounded object-cover"
-															onerror={() => artErrors.add(art)}
-														/>
-													{:else}
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="16"
-															height="16"
-															viewBox="0 0 24 24"
-															class="text-primary flex-shrink-0"
-														>
-															<path
-																fill="currentColor"
-																d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
-															/>
-														</svg>
-													{/if}
-													<p class="text-on-surface-variant truncate text-xs">
-														{listeningText(friend)}
-													</p>
-												</div>
+											<p
+												class="text-on-surface truncate text-base leading-snug font-bold"
+												title={current.title}
+											>
+												{current.title}
+											</p>
+											<p
+												class="text-on-surface-variant mt-0.5 truncate text-sm"
+												title={current.artist || 'Unknown Artist'}
+											>
+												{current.artist || 'Unknown Artist'}
+											</p>
+											{#if current.album}
+												<p
+													class="text-on-surface-variant/70 mt-0.5 truncate text-xs"
+													title={current.album}
+												>
+													{current.album}
+												</p>
 											{/if}
 										</div>
 									</div>
-									<div class="flex flex-shrink-0 items-center gap-2">
-										<Button variant="outlined" onclick={() => removeFriend(friend.id)}>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="24"
-												height="24"
-												viewBox="0 0 24 24"
-												><path
-													fill="currentColor"
-													d="M17 9h4q.425 0 .713.288T22 10t-.288.713T21 11h-4q-.425 0-.712-.288T16 10t.288-.712T17 9m-8 3q-1.65 0-2.825-1.175T5 8t1.175-2.825T9 4t2.825 1.175T13 8t-1.175 2.825T9 12m-8 6v-.8q0-.85.438-1.562T2.6 14.55q1.55-.775 3.15-1.162T9 13t3.25.388t3.15 1.162q.725.375 1.163 1.088T17 17.2v.8q0 .825-.587 1.413T15 20H3q-.825 0-1.412-.587T1 18m2 0h12v-.8q0-.275-.137-.5t-.363-.35q-1.35-.675-2.725-1.012T9 15t-2.775.338T3.5 16.35q-.225.125-.363.35T3 17.2zm6-8q.825 0 1.413-.587T11 8t-.587-1.412T9 6t-1.412.588T7 8t.588 1.413T9 10m0 8"
-												/></svg
-											>
-											Remove
-										</Button>
+								</article>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
+				<!-- Calm 2-Column Friends Grid -->
+				{#if filteredOther.length > 0}
+					<section aria-label="Friends list" class="flex flex-col gap-3.5">
+						{#if filteredListening.length > 0}
+							<h2 class="text-on-surface-variant text-sm font-semibold">Everyone else</h2>
+						{/if}
+
+						<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+							{#each filteredOther as friend (friend.id)}
+								{@const last = friend.listening?.lastPlayed ?? null}
+								{@const art = artworkUrl(friend)}
+								{@const label = displayName(friend)}
+								{@const isBusy = busyUsers.has(friend.id)}
+								{@const shortTime = formatShortTime(last?.playedAt, nowMs)}
+								{@const hasSeparateName = Boolean(
+									friend.name?.trim() &&
+									friend.name.trim().toLowerCase() !== friend.username.toLowerCase()
+								)}
+
+								<div
+									class="group bg-surface-container-low hover:bg-surface-container flex items-center gap-3.5 rounded-2xl px-4 py-3 transition-colors"
+								>
+									{@render avatar(friend, 'h-11 w-11', 'text-sm')}
+
+									<div class="min-w-0 flex-1">
+										<div class="flex items-baseline gap-1.5">
+											<p class="text-on-surface truncate text-sm font-semibold" title={label}>
+												{hasSeparateName ? label : `@${friend.username}`}
+											</p>
+											{#if hasSeparateName}
+												<span class="text-on-surface-variant/70 truncate text-xs">
+													@{friend.username}
+												</span>
+											{/if}
+										</div>
+
+										{#if last}
+											{@const trackSummary = `${last.title} · ${last.artist || 'Unknown Artist'}`}
+											<div class="mt-1 flex min-w-0 items-center gap-1.5">
+												{#if art && !artErrors.has(art)}
+													<img
+														src={art}
+														alt="Album art"
+														class="h-4 w-4 shrink-0 rounded object-cover"
+														onerror={() => artErrors.add(art)}
+													/>
+												{:else}
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														class="text-on-surface-variant/70 shrink-0"
+														aria-hidden="true"
+													>
+														<path
+															fill="currentColor"
+															d="M12 5v8.55c-.94-.54-2.1-.75-3.33-.32c-1.34.48-2.37 1.67-2.61 3.07a4.007 4.007 0 0 0 4.59 4.65c1.96-.31 3.35-2.11 3.35-4.1V7h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2"
+														/>
+													</svg>
+												{/if}
+												<p
+													class="text-on-surface-variant min-w-0 truncate text-xs"
+													title={`${trackSummary}${shortTime ? ` · ${shortTime}` : ''}`}
+												>
+													{trackSummary}
+												</p>
+												{#if shortTime}
+													<span class="text-on-surface-variant/65 shrink-0 text-[11px]">
+														· {shortTime}
+													</span>
+												{/if}
+											</div>
+										{/if}
 									</div>
+
+									<button
+										type="button"
+										onclick={() => removeFriend(friend)}
+										disabled={isBusy}
+										aria-label={`Remove ${label}`}
+										title={`Remove ${label}`}
+										class="text-on-surface-variant hover:bg-error-container/60 hover:text-error flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent opacity-65 transition-all focus-visible:opacity-100 disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="18"
+											height="18"
+											viewBox="0 0 24 24"
+										>
+											<path
+												fill="currentColor"
+												d="M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z"
+											/>
+										</svg>
+									</button>
 								</div>
 							{/each}
 						</div>
-					{:else}
-						<div class="flex flex-col items-center justify-center gap-2 py-8">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="48"
-								height="48"
-								viewBox="0 0 640 512"
-								class="text-on-surface-variant"
-							>
-								<path
-									fill="currentColor"
-									d="M192 256c61.9 0 112-50.1 112-112S253.9 32 192 32S80 82.1 80 144s50.1 112 112 112m76.8 32h-8.3c-20.8 10-43.9 16-68.5 16s-47.6-6-68.5-16h-8.3C51.6 288 0 339.6 0 403.2V432c0 26.5 21.5 48 48 48h288c26.5 0 48-21.5 48-48v-28.8c0-63.6-51.6-115.2-115.2-115.2M480 256c53 0 96-43 96-96s-43-96-96-96s-96 43-96 96s43 96 96 96m48 32h-3.8c-13.9 4.8-28.6 8-44.2 8s-30.3-3.2-44.2-8H432c-20.4 0-39.2 5.9-55.7 15.4c24.4 26.3 39.7 61.2 39.7 99.8v38.4c0 2.2-.5 4.3-.6 6.4H592c26.5 0 48-21.5 48-48c0-61.9-50.1-112-112-112"
-								/>
-							</svg>
-							<p class="text-on-surface-variant text-sm">No friends yet</p>
-							<p class="text-on-surface-variant text-xs">Add someone using their username above</p>
-						</div>
-					{/if}
-				</Card>
-			</section>
-		{/if}
+					</section>
+				{/if}
+			{/if}
+		</div>
 	</div>
-</div>
+
+	<!-- Add Friend Dialog -->
+	<Dialog
+		bind:open={addDialogOpen}
+		headline="Add friend"
+		onEsc={closeAddDialog}
+		onClick={closeAddDialog}
+		style="width: min(25rem, calc(100vw - 2rem));"
+	>
+		<form id="add-friend-form" onsubmit={handleAddFriend} class="flex flex-col gap-3">
+			<div
+				class="bg-surface ring-outline-variant focus-within:ring-primary flex items-center gap-1.5 rounded-xl px-3.5 ring-1 transition focus-within:ring-2"
+			>
+				<span class="text-on-surface-variant text-sm font-semibold select-none">@</span>
+				<input
+					bind:this={addInputEl}
+					type="text"
+					autocomplete="off"
+					autocapitalize="off"
+					spellcheck="false"
+					bind:value={selectedFriend}
+					oninput={() => (addFeedback = null)}
+					placeholder="username"
+					aria-label="Friend's username"
+					class="text-on-surface placeholder:text-on-surface-variant/60 w-full border-none bg-transparent py-2.5 text-sm outline-none"
+				/>
+			</div>
+
+			{#if isSelfUsername}
+				<p class="text-on-surface-variant text-xs">That’s your own username.</p>
+			{:else if matchingFriend}
+				<p class="text-on-surface-variant text-xs">
+					Already friends with @{matchingFriend.username}.
+				</p>
+			{:else if matchingOutgoing}
+				<p class="text-on-surface-variant text-xs">
+					Request already sent to @{matchingOutgoing.username}.
+				</p>
+			{:else if matchingIncoming}
+				<div
+					class="bg-surface-container flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+				>
+					<div class="min-w-0">
+						<p class="text-on-surface truncate text-xs font-semibold">
+							{displayName(matchingIncoming)} already sent you a request
+						</p>
+					</div>
+					<Button
+						variant="filled"
+						type="button"
+						onclick={() => acceptRequest(matchingIncoming)}
+						disabled={busyUsers.has(matchingIncoming.id)}
+					>
+						Accept
+					</Button>
+				</div>
+			{:else if addFeedback}
+				<p
+					role={addFeedback.tone === 'error' ? 'alert' : 'status'}
+					class={[
+						'text-xs font-medium',
+						addFeedback.tone === 'error' ? 'text-error' : 'text-primary'
+					]}
+				>
+					{addFeedback.message}
+				</p>
+			{/if}
+
+			{#if $SavedUser?.username}
+				<div
+					class="border-outline-variant/40 mt-1 flex items-center justify-between gap-2 border-t pt-3 text-xs"
+				>
+					<span class="text-on-surface-variant truncate">
+						Your username: <span class="text-on-surface font-semibold">@{$SavedUser.username}</span>
+					</span>
+					<button
+						type="button"
+						onclick={copyOwnUsername}
+						class="text-primary hover:bg-primary/10 shrink-0 cursor-pointer rounded-full border-none bg-transparent px-2.5 py-1 text-xs font-semibold transition-colors"
+					>
+						{copiedUsername ? 'Copied' : 'Copy'}
+					</button>
+				</div>
+			{/if}
+		</form>
+
+		{#snippet buttons()}
+			<Button variant="text" onclick={closeAddDialog}>Cancel</Button>
+			<Button variant="filled" type="submit" form="add-friend-form" disabled={!canSubmitAdd}>
+				{addingFriend ? 'Sending...' : 'Send request'}
+			</Button>
+		{/snippet}
+	</Dialog>
+{/if}
+
+<style>
+	.eq-bars {
+		display: inline-flex;
+		align-items: flex-end;
+		gap: 2px;
+		height: 12px;
+	}
+
+	.eq-bars span {
+		width: 2.5px;
+		border-radius: 999px;
+		background: rgb(var(--m3-scheme-primary));
+		animation: eq-bounce 1s ease-in-out infinite;
+	}
+
+	.eq-bars span:nth-child(1) {
+		height: 55%;
+		animation-delay: 0s;
+	}
+
+	.eq-bars span:nth-child(2) {
+		height: 100%;
+		animation-delay: 0.2s;
+	}
+
+	.eq-bars span:nth-child(3) {
+		height: 70%;
+		animation-delay: 0.4s;
+	}
+
+	@keyframes eq-bounce {
+		0%,
+		100% {
+			transform: scaleY(0.45);
+			transform-origin: bottom;
+		}
+		50% {
+			transform: scaleY(1);
+			transform-origin: bottom;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.eq-bars span {
+			animation: none;
+		}
+	}
+</style>
