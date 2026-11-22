@@ -1,8 +1,35 @@
+import { parseWebStream } from 'music-metadata';
+
 const MAX_PAGE_BYTES = 27 + 255 + 255 * 255;
 const OGG_MAGIC = 0x4f676753;
+const METADATA_CHUNK_BYTES = 256 * 1024;
 
-export async function readOpusDuration(file: Blob): Promise<number | undefined> {
-	const head = new DataView(await file.slice(0, 27 + 255 + 12).arrayBuffer());
+export async function readOpusMetadata(file: File) {
+	const firstChunk = await file.slice(0, METADATA_CHUNK_BYTES).arrayBuffer();
+	const duration = await readOpusDuration(file, firstChunk);
+	if (duration === undefined) return;
+
+	let position = 0;
+	const stream = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			const chunk = position === 0
+				? firstChunk
+				: await file.slice(position, position + METADATA_CHUNK_BYTES).arrayBuffer();
+			controller.enqueue(new Uint8Array(chunk));
+			position += chunk.byteLength;
+			if (position >= file.size) controller.close();
+		}
+	}, { highWaterMark: 0 });
+	try {
+		const metadata = await parseWebStream(stream, { mimeType: 'audio/ogg', size: file.size });
+		return { ...metadata, format: { ...metadata.format, duration } };
+	} finally {
+		await stream.cancel();
+	}
+}
+
+async function readOpusDuration(file: Blob, firstChunk: ArrayBuffer): Promise<number | undefined> {
+	const head = new DataView(firstChunk);
 	if (head.byteLength < 28 || head.getUint32(0) !== OGG_MAGIC || head.getUint16(4) !== 2)
 		return;
 	const packet = 27 + head.getUint8(26);
@@ -14,7 +41,9 @@ export async function readOpusDuration(file: Blob): Promise<number | undefined> 
 
 	const serial = head.getUint32(14, true);
 	const preSkip = head.getUint16(packet + 10, true);
-	const tail = new DataView(await file.slice(-MAX_PAGE_BYTES).arrayBuffer());
+	const tail = firstChunk.byteLength === file.size
+		? new DataView(firstChunk, Math.max(0, file.size - MAX_PAGE_BYTES))
+		: new DataView(await file.slice(-MAX_PAGE_BYTES).arrayBuffer());
 	for (let offset = tail.byteLength - 27; offset >= 0; offset--) {
 		if (
 			tail.getUint32(offset) !== OGG_MAGIC ||

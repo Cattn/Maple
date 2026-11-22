@@ -80,14 +80,13 @@ export class IFS {
 		folderId: string,
 		directory: FileSystemDirectoryHandle,
 		parentPath: string[] = []
-	): AsyncGenerator<{ file: File; source: LinkedSource }> {
+	): AsyncGenerator<{ handle: FileSystemFileHandle; source: LinkedSource }> {
 		for await (const entry of directory.values()) {
 			const path = [...parentPath, entry.name];
 			if (entry.kind === 'directory') {
 				yield* this.scanFolder(folderId, entry, path);
 			} else {
-				const file = await entry.getFile();
-				yield { file, source: { kind: 'linked-folder', folderId, path } };
+				yield { handle: entry, source: { kind: 'linked-folder', folderId, path } };
 			}
 		}
 	}

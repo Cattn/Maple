@@ -1,6 +1,6 @@
 import { embeddedLyrics } from '$lib/lyrics';
 import { parseBlob, parseBuffer } from 'music-metadata';
-import { readOpusDuration } from '$lib/opus';
+import { readOpusMetadata } from '$lib/opus';
 import { IFS, type LinkedFolder } from '$lib/ifs';
 import { OPFS } from '$lib/opfs';
 import { toast } from 'svelte-sonner';
@@ -77,12 +77,14 @@ async function parseMetadataWithTimeout(
 		});
 		const parsePromise = (async () => {
 			const ogg = needsOggDuration(file);
-			const duration = ogg ? await readOpusDuration(file) : undefined;
-			const metadata = await parseBlob(file, {
-				duration: ogg && duration === undefined,
+			if (ogg) {
+				const metadata = await readOpusMetadata(file);
+				if (metadata) return metadata;
+			}
+			return parseBlob(file, {
+				duration: ogg,
 				skipPostHeaders: false
 			});
-			return duration === undefined ? metadata : { ...metadata, format: { ...metadata.format, duration } };
 		})();
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
@@ -116,7 +118,7 @@ async function parseMetadataFast(file: File) {
 	return null;
 }
 
-type LibraryFile = { file: File; source: SongSource };
+type LibraryFile = { file: File; source: SongSource } | { handle: FileSystemFileHandle; source: SongSource };
 let pendingImport = Promise.resolve();
 type FolderAction = { kind: 'refresh' | 'relink'; id: string };
 
@@ -199,12 +201,14 @@ async function importSelection(selection: File[] | FileSystemDirectoryHandle, ac
 		const addedIds: string[] = [];
 		await OPFS.beginImport();
 		try {
-			for await (const { file, source } of files) {
-				if (!isAudioFile(file)) continue;
+			for await (const entry of files) {
+				const { source } = entry;
 				if (source.kind === 'linked-folder' && knownPaths.has(JSON.stringify(source.path))) {
 					skippedCount++;
 					continue;
 				}
+				const file = 'file' in entry ? entry.file : await entry.handle.getFile();
+				if (!isAudioFile(file)) continue;
 				processedCount++;
 				const perSong = mobile || (total ?? processedCount) <= SMALL_IMPORT_LIMIT;
 				if (perSong || processedCount === 1 || processedCount === total || processedCount % 8 === 0) {
