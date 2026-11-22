@@ -17,7 +17,7 @@
 	const extraRoutes = [
 		{ path: '/albums', label: 'Albums', icon: 'albums' },
 		{ path: '/artists', label: 'Artists', icon: 'artists' },
-		{ path: '/friends', label: 'Friends', icon: 'friends' },
+		{ path: '/friends', label: 'Social', icon: 'friends' },
 		{ path: '/settings', label: 'Settings', icon: 'settings' }
 	];
 

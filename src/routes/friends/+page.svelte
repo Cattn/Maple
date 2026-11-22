@@ -351,7 +351,7 @@
 	}
 
 	onMount(() => {
-		title.set('Friends');
+		title.set('Social');
 		const timer = setInterval(() => {
 			nowMs = Date.now();
 		}, 60_000);
@@ -447,7 +447,7 @@
 		<!-- Clean Header -->
 		<header class="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-baseline gap-3">
-				<h1 class="text-on-surface text-3xl font-black tracking-tight sm:text-4xl">Friends</h1>
+				<h1 class="text-on-surface text-3xl font-black tracking-tight sm:text-4xl">Social</h1>
 				{#if activeListenerCount > 0}
 					<span
 						class="text-on-surface-variant inline-flex items-center gap-1.5 text-xs font-medium"
