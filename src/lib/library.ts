@@ -1,6 +1,7 @@
 import { embeddedLyrics } from '$lib/lyrics';
-import { parseBlob, parseBuffer } from 'music-metadata';
+import { parseBuffer } from 'music-metadata';
 import { readOpusMetadata } from '$lib/opus';
+import { readBufferedMetadata } from '$lib/bufferedMetadata';
 import { IFS, type LinkedFolder } from '$lib/ifs';
 import { OPFS } from '$lib/opfs';
 import { toast } from 'svelte-sonner';
@@ -69,7 +70,7 @@ function needsOggDuration(file: File) {
 async function parseMetadataWithTimeout(
 	file: File,
 	timeoutMs: number = 30000
-): Promise<Awaited<ReturnType<typeof parseBlob>> | null> {
+): Promise<Awaited<ReturnType<typeof parseBuffer>> | null> {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		const timeoutPromise = new Promise<null>((_, reject) => {
@@ -81,10 +82,7 @@ async function parseMetadataWithTimeout(
 				const metadata = await readOpusMetadata(file);
 				if (metadata) return metadata;
 			}
-			return parseBlob(file, {
-				duration: ogg,
-				skipPostHeaders: false
-			});
+			return readBufferedMetadata(file, ogg);
 		})();
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
