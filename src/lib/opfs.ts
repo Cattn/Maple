@@ -309,9 +309,14 @@ export class OPFS {
 		await write(`/tracks/${id}.${extension}`, fileContent);
 	}
 
+	private static hasManagedTrack(tracks: Song[], title: string, artist: string): boolean {
+		return tracks.some(
+			(t) => t.source?.kind !== 'linked-folder' && t.title === title && t.artist === artist
+		);
+	}
+
 	public static async hasTrack(title: string, artist: string): Promise<boolean> {
-		const tracks = await this.readTracksCache();
-		return tracks.some((t) => t.title === title && t.artist === artist);
+		return this.hasManagedTrack(await this.readTracksCache(), title, artist);
 	}
 
 	public static async discardImportedTrack(track: Song): Promise<void> {
@@ -319,9 +324,11 @@ export class OPFS {
 		if (tracks.some((t) => t.id === track.id)) {
 			await this.track().delete(track);
 		} else {
-			await file(`/tracks/${track.id}.${track.ext}`)
-				.remove()
-				.catch(() => {});
+			if (track.source?.kind !== 'linked-folder') {
+				await file(`/tracks/${track.id}.${track.ext}`)
+					.remove()
+					.catch(() => {});
+			}
 			await file(`/images/${track.id}.image`)
 				.remove()
 				.catch(() => {});
@@ -343,7 +350,10 @@ export class OPFS {
 
 	public static async addTrack(track: Song): Promise<boolean> {
 		const tracks = await this.readTracksCache();
-		if (tracks.some((t) => t.title === track.title && t.artist === track.artist)) {
+		if (
+			track.source?.kind !== 'linked-folder' &&
+			this.hasManagedTrack(tracks, track.title, track.artist)
+		) {
 			return false;
 		}
 
@@ -649,7 +659,9 @@ export class OPFS {
 			if (index !== -1) {
 				tracks.splice(index, 1);
 				await this.writeTracksCache(tracks);
-				await file(`/tracks/${track.id}.${track.ext}`).remove();
+				if (track.source?.kind !== 'linked-folder') {
+					await file(`/tracks/${track.id}.${track.ext}`).remove();
+				}
 				await file(`/images/${track.id}.image`).remove();
 
 				async function removeTrackFromCollections<T extends Album | Artist | Playlist>(

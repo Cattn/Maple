@@ -1,10 +1,11 @@
 import { embeddedLyrics } from '$lib/lyrics';
 import { parseBlob, parseBuffer } from 'music-metadata';
+import { IFS, type LinkedFolder } from '$lib/ifs';
 import { OPFS } from '$lib/opfs';
 import { toast } from 'svelte-sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { writable } from 'svelte/store';
-import type { Song, Album, Artist } from '$lib/types';
+import type { Song, Album, Artist, SongSource } from '$lib/types';
 import UserSettings from '$lib/preferences/usersettings';
 import { refreshLibrary } from '$lib/global.svelte';
 import { statsManager } from '$lib/stats';
@@ -68,7 +69,10 @@ async function parseMetadataWithTimeout(
 		const timeoutPromise = new Promise<null>((_, reject) => {
 			timeout = setTimeout(() => reject(new Error('Metadata parsing timeout')), timeoutMs);
 		});
-		const parsePromise = parseBlob(file, { duration: needsOggDuration(file), skipPostHeaders: false });
+		const parsePromise = parseBlob(file, {
+			duration: needsOggDuration(file),
+			skipPostHeaders: false
+		});
 		return await Promise.race([parsePromise, timeoutPromise]);
 	} catch {
 		return null;
@@ -101,157 +105,218 @@ async function parseMetadataFast(file: File) {
 	return parseMetadataWithTimeout(file);
 }
 
-export async function createLibrary(mobileFiles?: FileList | File[]): Promise<void> {
-	if (mobileFiles === undefined) {
+type LibraryFile = { file: File; source: SongSource };
+let pendingImport = Promise.resolve();
+type FolderAction = { kind: 'refresh' | 'relink'; id: string };
+
+export function openTrackFile(song: Song): Promise<File | undefined> {
+	if (song.source?.kind === 'linked-folder') return IFS.openFile(song.source);
+	return OPFS.getSong(song);
+}
+
+export async function createLibrary(
+	selection?: FileList | File[] | FileSystemDirectoryHandle
+): Promise<void> {
+	if (selection === undefined) {
 		iosImportOpen.set(true);
 		return;
 	}
+	return queueImport('kind' in selection ? selection : Array.from(selection));
+}
 
-	const selected = Array.from(mobileFiles);
+export async function refreshLinkedFolder(folder: LinkedFolder): Promise<void> {
+	const handle = folder.handle as FileSystemDirectoryHandle & {
+		requestPermission?: (options: { mode: 'read' }) => Promise<PermissionState>;
+	};
+	if (handle.requestPermission && (await handle.requestPermission({ mode: 'read' })) !== 'granted') {
+		throw new Error(`Allow read access to refresh “${handle.name}”.`);
+	}
+	return queueImport(handle, { kind: 'refresh', id: folder.id });
+}
 
+export async function relinkFolder(folder: LinkedFolder): Promise<void> {
+	const handle = await pickLibraryFolder();
+	if (handle) await queueImport(handle, { kind: 'relink', id: folder.id });
+}
+
+function queueImport(selection: File[] | FileSystemDirectoryHandle, action?: FolderAction) {
+	pendingImport = pendingImport.then(() => importSelection(selection, action));
+	return pendingImport;
+}
+
+async function importSelection(selection: File[] | FileSystemDirectoryHandle, action?: FolderAction) {
 	try {
 		const sampleImage = await fetch('/placeholder.png');
 		const blob = await sampleImage.blob();
 		await OPFS.initializeLibrary();
 
-		const handleFiles = async (files: FileList | File[]) => {
-			if (!files || files.length === 0) {
-				toast.error('No files selected. Please select audio files to upload.');
-				return;
+		let files: LibraryFile[] | AsyncIterable<LibraryFile>;
+		let total: number | undefined;
+		const knownPaths = new Set<string>();
+		if ('kind' in selection) {
+			let folderId: string;
+			if (action) {
+				folderId = action.id;
+				const paths: string[][] = [];
+				for (const { source } of await OPFS.get().tracks()) {
+					if (source?.kind === 'linked-folder' && source.folderId === folderId) {
+						knownPaths.add(JSON.stringify(source.path));
+						if (action.kind === 'relink') paths.push(source.path);
+					}
+				}
+				if (action.kind === 'relink') {
+					await IFS.linkFolder(selection, { id: folderId, paths });
+				}
+			} else {
+				folderId = await IFS.linkFolder(selection);
 			}
+			files = IFS.scanFolder(folderId, selection);
+		} else {
+			files = selection
+				.filter(isAudioFile)
+				.map((file) => ({
+					file,
+					source: { kind: 'opfs' }
+				}));
+			total = files.length;
+		}
 
-			const audioFiles = Array.from(files).filter(isAudioFile);
-			if (audioFiles.length === 0) {
-				toast.error('No audio files found. Please select audio files (MP3, FLAC, etc.).');
-				return;
-			}
+		let processedCount = 0;
+		let successCount = 0;
+		let skippedCount = 0;
+		const addedIds: string[] = [];
+		await OPFS.beginImport();
+		try {
+			for await (const { file, source } of files) {
+				if (!isAudioFile(file)) continue;
+				if (source.kind === 'linked-folder' && knownPaths.has(JSON.stringify(source.path))) {
+					skippedCount++;
+					continue;
+				}
+				processedCount++;
+				if (processedCount === 1 || processedCount === total || processedCount % 8 === 0) {
+					const progress = total ? `${processedCount} of ${total}` : processedCount;
+					toast(`${progress} | Processing ${file.name}`, {
+						id: IMPORT_TOAST_ID
+					});
+					await yieldToUI();
+				}
 
-			let i = 0;
-			let successCount = 0;
-			let skippedCount = 0;
-			const addedIds: string[] = [];
-			await OPFS.beginImport();
-			try {
-				for (const file of audioFiles) {
-					i++;
-					if (i === 1 || i === audioFiles.length || i % 8 === 0) {
-						toast(`${i} of ${audioFiles.length} | Processing ${file.name}`, {
-							id: IMPORT_TOAST_ID
-						});
-						await yieldToUI();
+				try {
+					const metadata = await parseMetadataFast(file);
+					const duration = metadata?.format.duration ?? 0;
+					const picture = metadata?.common.picture?.[0];
+					const cover = picture ? new Blob([picture.data.slice()], { type: picture.format }) : blob;
+					const track: Song = {
+						id: uuidv4(),
+						source,
+						title: metadata?.common.title || file.name.split('.').slice(0, -1).join('.'),
+						artist: metadata?.common.artist || 'Unknown Artist',
+						album: metadata?.common.album || 'Unknown Album',
+						year: metadata?.common.year || 0,
+						genre: metadata?.common.genre
+							? Array.isArray(metadata.common.genre)
+								? metadata.common.genre[0]
+								: metadata.common.genre
+							: 'Unknown Genre',
+						duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+						image: cover,
+						trackNumber: metadata?.common.track?.no ?? 0,
+						disk: metadata?.common.disk?.no ?? 0,
+						ext: file.name.split('.').pop() || 'mp3',
+						fileName: file.name,
+						lyrics: metadata ? (embeddedLyrics(metadata.common.lyrics) ?? []) : undefined
+					};
+
+					const album: Album = {
+						id: uuidv4(),
+						name: metadata?.common.album || 'Unknown Album',
+						artist: metadata?.common.artist || 'Unknown Artist',
+						year: metadata?.common.year || 0,
+						genre: metadata?.common.genre
+							? Array.isArray(metadata.common.genre)
+								? metadata.common.genre[0]
+								: metadata.common.genre
+							: 'Unknown Genre',
+						image: cover
+					};
+
+					const artist: Artist = {
+						id: uuidv4(),
+						name: metadata?.common.artist || 'Unknown Artist'
+					};
+
+					if (source.kind === 'opfs' && (await OPFS.hasTrack(track.title, track.artist))) {
+						skippedCount++;
+						continue;
 					}
 
 					try {
-						const metadata = await parseMetadataFast(file);
-						const duration = metadata?.format.duration ?? 0;
-						const picture = metadata?.common.picture?.[0];
-						const cover = picture
-							? new Blob([picture.data.slice()], { type: picture.format })
-							: blob;
-						const track: Song = {
-							id: uuidv4(),
-							title: metadata?.common.title || file.name.split('.').slice(0, -1).join('.'),
-							artist: metadata?.common.artist || 'Unknown Artist',
-							album: metadata?.common.album || 'Unknown Album',
-							year: metadata?.common.year || 0,
-							genre: metadata?.common.genre
-								? Array.isArray(metadata.common.genre)
-									? metadata.common.genre[0]
-									: metadata.common.genre
-								: 'Unknown Genre',
-							duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
-							image: cover,
-							trackNumber: metadata?.common.track?.no ?? 0,
-							disk: metadata?.common.disk?.no ?? 0,
-							ext: file.name.split('.').pop() || 'mp3',
-							fileName: file.name,
-							lyrics: metadata ? (embeddedLyrics(metadata.common.lyrics) ?? []) : undefined
-						};
-
-						const album: Album = {
-							id: uuidv4(),
-							name: metadata?.common.album || 'Unknown Album',
-							artist: metadata?.common.artist || 'Unknown Artist',
-							year: metadata?.common.year || 0,
-							genre: metadata?.common.genre
-								? Array.isArray(metadata.common.genre)
-									? metadata.common.genre[0]
-									: metadata.common.genre
-								: 'Unknown Genre',
-							image: cover
-						};
-
-						const artist: Artist = {
-							id: uuidv4(),
-							name: metadata?.common.artist || 'Unknown Artist'
-						};
-
-						if (await OPFS.hasTrack(track.title, track.artist)) {
+						if (source.kind === 'opfs') await OPFS.addFile(track.id, file);
+						if (!(await OPFS.addTrack(track))) {
+							await OPFS.discardImportedTrack(track);
 							skippedCount++;
 							continue;
 						}
-
-						try {
-							await OPFS.addFile(track.id, file);
-							if (!(await OPFS.addTrack(track))) {
-								await OPFS.discardImportedTrack(track);
-								skippedCount++;
-								continue;
-							}
-							await OPFS.addAlbum(album, track.id);
-							await OPFS.addArtist(artist, track.id, track.album);
-						} catch (error) {
-							await OPFS.discardImportedTrack(track).catch(() => {});
-							throw error;
-						}
-						addedIds.push(track.id);
-						successCount++;
-						if (successCount % IMPORT_FLUSH_EVERY === 0) {
-							await OPFS.flushImport();
-						}
+						await OPFS.addAlbum(album, track.id);
+						await OPFS.addArtist(artist, track.id, track.album);
 					} catch (error) {
-						console.error(`Error processing file ${file.name}:`, error);
-						if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-							toast.error('Storage is full. Free space on this device and try again.');
-							break;
-						}
+						await OPFS.discardImportedTrack(track).catch(() => {});
+						throw error;
+					}
+					if (source.kind === 'linked-folder') knownPaths.add(JSON.stringify(source.path));
+					addedIds.push(track.id);
+					successCount++;
+					if (successCount % IMPORT_FLUSH_EVERY === 0) {
+						await OPFS.flushImport();
+					}
+				} catch (error) {
+					console.error(`Error processing file ${file.name}:`, error);
+					if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+						toast.error('Storage is full. Free space on this device and try again.');
+						break;
 					}
 				}
-			} finally {
-				await OPFS.endImport();
 			}
+		} finally {
+			if (processedCount > 0) toast.dismiss(IMPORT_TOAST_ID);
+			await OPFS.endImport();
 			statsManager.recordLibraryAddMany(addedIds);
 			await refreshLibrary();
 			const tracks = await OPFS.get().tracks();
 			statsManager.setLibrarySize(tracks.length);
 			OPFS.rememberLibrarySize(tracks.length);
-			const skippedNote =
-				skippedCount > 0
-					? `, ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'} skipped`
-					: '';
-			if (successCount > 0) {
-				toast.success(`Library added successfully! (${successCount} tracks${skippedNote})`);
-				await OPFS.requestPersistentStorage();
-			} else if (skippedCount > 0) {
-				toast.info(
-					`All ${skippedCount} track${skippedCount === 1 ? ' is' : 's are'} already in your library.`
-				);
+		}
+		const skippedNote =
+			skippedCount > 0 ? `, ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'} skipped` : '';
+		if (successCount > 0) {
+			if (action?.kind === 'relink') {
+				toast.success(`Folder relinked. Added ${successCount} new ${successCount === 1 ? 'track' : 'tracks'}.`);
 			} else {
-				toast.error('No tracks could be processed. Please try again.');
+				toast.success(`Library added successfully! (${successCount} tracks${skippedNote})`);
 			}
-		};
-
-		await handleFiles(selected);
+			await OPFS.requestPersistentStorage();
+		} else if (action?.kind === 'relink' && processedCount === 0) {
+			toast.success('Folder relinked.');
+		} else if (action && processedCount === 0) {
+			toast.info('No new tracks found in this folder.');
+		} else if (skippedCount > 0) {
+			toast.info(
+				`All ${skippedCount} track${skippedCount === 1 ? ' is' : 's are'} already in your library.`
+			);
+		} else if (processedCount === 0) {
+			toast.error('No audio files found.');
+		} else {
+			toast.error('No tracks could be processed. Please try again.');
+		}
 	} catch (error) {
 		console.error('Error in createLibrary:', error);
-		if (error instanceof Error) {
-			if (error.name === 'AbortError') {
-				return;
-			}
-			toast.error(`Failed to create library: ${error.message}`);
-		} else {
-			toast.error('Failed to create library. Please try again.');
-		}
+		if (error instanceof Error && error.name === 'AbortError') return;
+		toast.error(
+			error instanceof Error
+				? `Could not finish adding music: ${error.message}`
+				: 'Could not finish adding music.'
+		);
 	}
 }
 
@@ -296,17 +361,28 @@ async function collectFilesFromDirectoryHandle(
 	return files;
 }
 
-export async function pickLibraryDirectory(): Promise<File[] | null> {
+export async function pickLibraryFolder(): Promise<FileSystemDirectoryHandle | null> {
 	if (!isDirectoryPickerSupported()) return null;
 	try {
-		const dirHandle: FileSystemDirectoryHandle = await window.showDirectoryPicker();
-		return await collectFilesFromDirectoryHandle(dirHandle);
+		return await window.showDirectoryPicker();
 	} catch (error) {
 		if (error instanceof Error && error.name === 'AbortError') {
 			return null;
 		}
 		console.error('Directory picker failed:', error);
 		toast.error('Could not open the folder picker. Try selecting files instead.');
+		return null;
+	}
+}
+
+export async function pickLibraryDirectory(): Promise<File[] | null> {
+	const handle = await pickLibraryFolder();
+	if (!handle) return null;
+	try {
+		return await collectFilesFromDirectoryHandle(handle);
+	} catch (error) {
+		console.error('Could not read music folder:', error);
+		toast.error('Could not read the folder. Try selecting files instead.');
 		return null;
 	}
 }

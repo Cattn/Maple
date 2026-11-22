@@ -77,6 +77,10 @@ export type Playlist = {
 
 export type LyricLine = { text: string; time?: number };
 
+export type SongSource =
+    | { kind: 'opfs' }
+    | { kind: 'linked-folder'; folderId: string; path: string[] }
+
 export type Song = {
 	lyrics?: LyricLine[];
 	id: string;
@@ -91,4 +95,5 @@ export type Song = {
 	trackNumber: number;
 	disk: number;
 	ext: string;
+	source?: SongSource;
 };

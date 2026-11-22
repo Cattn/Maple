@@ -30,7 +30,8 @@
 	import AccountSecurity from '$lib/components/AccountSecurity.svelte';
 	import ThemeColorPicker from '$lib/components/ThemeColorPicker.svelte';
 	import { OPFS } from '$lib/opfs';
-	import { createLibrary } from '$lib/library';
+	import { IFS, type LinkedFolder } from '$lib/ifs';
+	import { createLibrary, refreshLinkedFolder, relinkFolder } from '$lib/library';
 	import { albums, playlists, refreshLibrary, tracks } from '$lib/global.svelte';
 
 	type SectionId = 'account' | 'appearance' | 'library' | 'connections' | 'app';
@@ -153,6 +154,62 @@
 	let playlistCount = $derived(playlists().length);
 	let clearDialogOpen = $state(false);
 	let clearingLibrary = $state(false);
+	const linkedFolders = IFS.linkedFolders;
+	let foldersLoadFailed = $state(false);
+	let refreshingFolder = $state<string | null>(null);
+	let unavailableFolders = $state<string[]>([]);
+	let locationCheck = 0;
+	let foldersByName = $derived(
+		[...$linkedFolders].sort((a, b) => a.handle.name.localeCompare(b.handle.name))
+	);
+	let sourceCounts = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const { source } of tracks()) {
+			const id = source?.kind === 'linked-folder' ? source.folderId : 'internal';
+			counts.set(id, (counts.get(id) ?? 0) + 1);
+		}
+		return counts;
+	});
+
+	$effect(() => {
+		if (activeSection !== 'library') return;
+		foldersLoadFailed = false;
+		IFS.loadFolders().catch(() => (foldersLoadFailed = true));
+	});
+
+	async function checkLocations(folders: LinkedFolder[]) {
+		const check = ++locationCheck;
+		const missing = await Promise.all(folders.map(async ({ id, handle }) =>
+			(await IFS.needsRelink(handle)) ? id : null
+		));
+		if (check === locationCheck) unavailableFolders = missing.filter((id) => id !== null);
+	}
+
+	$effect(() => {
+		if (activeSection !== 'library') return;
+		const folders = $linkedFolders;
+		const check = () => void checkLocations(folders);
+		check();
+		window.addEventListener('focus', check);
+		return () => {
+			window.removeEventListener('focus', check);
+			locationCheck++;
+		};
+	});
+
+	async function refreshSource(folder: LinkedFolder) {
+		if (refreshingFolder || clearingLibrary) return;
+		refreshingFolder = folder.id;
+		try {
+			if (unavailableFolders.includes(folder.id)) await relinkFolder(folder);
+			else await refreshLinkedFolder(folder);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Could not access the linked folder.');
+		} finally {
+			refreshingFolder = null;
+			if (activeSection === 'library') await checkLocations($linkedFolders);
+		}
+	}
 	let saving = $state(false);
 
 	// Sync profile fields whenever SavedUser updates
@@ -437,6 +494,7 @@
 		clearDialogOpen = false;
 		try {
 			await OPFS.clearLibrary();
+			await IFS.clearFolders();
 			await OPFS.initializeLibrary();
 			await refreshLibrary();
 			toast.success('Library cleared.');
@@ -993,6 +1051,69 @@
 						</div>
 					</div>
 
+					<section
+						aria-labelledby="library-sources"
+						class="bg-surface-container-low border-outline-variant/50 overflow-hidden rounded-3xl border"
+					>
+						<div class="border-outline-variant/40 border-b px-5 py-3.5">
+							<h3
+								id="library-sources"
+								class="text-on-surface-variant text-xs font-semibold tracking-wider uppercase"
+							>
+								Sources
+							</h3>
+						</div>
+						<ul class="divide-outline-variant/40 m-0 list-none divide-y p-0">
+							<li class="px-5 py-4">
+								<p class="text-on-surface text-sm font-semibold">Internal</p>
+								<p class="text-on-surface-variant mt-0.5 text-xs leading-relaxed">
+									{sourceCounts.get('internal') ?? 0}
+									{sourceCounts.get('internal') === 1 ? 'track' : 'tracks'} · Updated when you import music
+								</p>
+							</li>
+							{#each foldersByName as folder (folder.id)}
+								{@const count = sourceCounts.get(folder.id) ?? 0}
+								{@const missing = unavailableFolders.includes(folder.id)}
+								<li class="flex items-center justify-between gap-4 px-5 py-4">
+									<div class="min-w-0 flex-1">
+										<p class="text-on-surface flex items-center gap-2 text-sm font-semibold">
+											<svg
+												aria-hidden="true"
+												class="text-on-surface-variant shrink-0"
+												width="20"
+												height="20"
+												viewBox="0 0 24 24"
+											>
+												<path fill="currentColor" d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
+											</svg>
+											<span class="min-w-0 wrap-anywhere">{folder.handle.name}</span>
+										</p>
+										<p class="text-on-surface-variant mt-0.5 text-xs leading-relaxed">
+											{count} {count === 1 ? 'track' : 'tracks'} · {missing ? 'Folder unavailable' : 'Linked folder'}
+										</p>
+									</div>
+									<Button
+										variant="tonal"
+										aria-label={`${missing ? 'Relink' : 'Refresh'} ${folder.handle.name}`}
+										disabled={refreshingFolder !== null || clearingLibrary}
+										onclick={() => refreshSource(folder)}
+									>
+										{#if missing}
+											{refreshingFolder === folder.id ? 'Relinking…' : 'Relink'}
+										{:else}
+											{refreshingFolder === folder.id ? 'Refreshing…' : 'Refresh'}
+										{/if}
+									</Button>
+								</li>
+							{/each}
+						</ul>
+						{#if foldersLoadFailed || foldersByName.length}
+							<p class="border-outline-variant/40 text-on-surface-variant border-t px-5 py-3 text-xs leading-relaxed">
+								{foldersLoadFailed ? 'Could not load linked folders.' : 'Refresh a folder to find new music in it and its subfolders.'}
+							</p>
+						{/if}
+					</section>
+
 					<!-- Import & Lyrics Preferences -->
 					<div
 						class="bg-surface-container-low border-outline-variant/50 overflow-hidden rounded-3xl border"
@@ -1077,7 +1198,7 @@
 							<button
 								type="button"
 								onclick={() => (clearDialogOpen = true)}
-								disabled={clearingLibrary}
+								disabled={clearingLibrary || refreshingFolder !== null}
 								class="bg-error text-on-error hover:bg-error/90 shrink-0 cursor-pointer rounded-full border-none px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50"
 							>
 								Clear library

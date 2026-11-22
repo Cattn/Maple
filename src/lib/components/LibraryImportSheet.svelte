@@ -8,7 +8,8 @@
 		isDirectoryPickerSupported,
 		isIOS,
 		isWebkitDirectorySupported,
-		pickLibraryDirectory
+		pickLibraryDirectory,
+		pickLibraryFolder
 	} from '$lib/library';
 
 	let dragging = $state(false);
@@ -55,11 +56,11 @@
 		void handleSelected(snapshot);
 	}
 
-	async function onPickDirectory() {
-		const files = await pickLibraryDirectory();
-		if (files === null) return;
+	async function onPickDirectory(link: boolean) {
+		const selection = link ? await pickLibraryFolder() : await pickLibraryDirectory();
+		if (!selection) return;
 		forceClose();
-		await createLibrary(files);
+		await createLibrary(selection);
 	}
 
 	function onDragOver(e: DragEvent) {
@@ -171,7 +172,9 @@
 			<div class="flex flex-col gap-1">
 				<h2 class="text-on-surface text-lg font-semibold">Upload music</h2>
 				<p class="text-on-surface-variant text-sm">
-					{#if canPickDirectory}
+					{#if directoryPickerAvailable}
+						Import a copy, or link a folder to play its music in place.
+					{:else if canPickDirectory}
 						Select multiple audio files, a folder, or drag them here.
 					{:else}
 						Select multiple audio files, or drag them here.
@@ -190,16 +193,23 @@
 						class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 						onchange={onInputChange}
 					/>
-					Choose files
+					Import files
 				</label>
 
 				{#if directoryPickerAvailable}
 					<button
 						type="button"
 						class="bg-primary text-on-primary relative flex flex-1 cursor-pointer items-center justify-center rounded-full border-none px-4 py-3 text-sm font-semibold"
-						onclick={() => void onPickDirectory()}
+						onclick={() => void onPickDirectory(false)}
 					>
-						Choose folder
+						Import folder
+					</button>
+					<button
+						type="button"
+						class="bg-primary text-on-primary relative flex flex-1 cursor-pointer items-center justify-center rounded-full border-none px-4 py-3 text-sm font-semibold"
+						onclick={() => void onPickDirectory(true)}
+					>
+						Link folder
 					</button>
 				{:else if webkitDirectoryAvailable}
 					<label
@@ -212,7 +222,7 @@
 							class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 							onchange={onInputChange}
 						/>
-						Choose folder
+						Import folder
 					</label>
 				{/if}
 			</div>
