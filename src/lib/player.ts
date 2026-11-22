@@ -3,6 +3,8 @@ import { embeddedLyrics } from '$lib/lyrics';
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
 import { OPFS } from '$lib/opfs';
+import { openTrackFile } from '$lib/library';
+import { toast } from 'svelte-sonner';
 import type { Song } from '$lib/types';
 import {
 	activeSong,
@@ -273,7 +275,7 @@ function audioKey(song: Song) {
 }
 
 async function loadAudioBlob(song: Song) {
-	const file = await OPFS.getSong(song);
+	const file = await openTrackFile(song);
 	return file?.slice(0, file.size, audioMimeType(song.ext));
 }
 
@@ -342,7 +344,19 @@ async function playAtIndex(index: number) {
 	let song = state.items[normalized];
 	const request = ++playbackRequest;
 	const prepared = preparedAudio?.key === audioKey(song) ? preparedAudio : null;
-	const blob = prepared?.blob ?? (await (prepared?.loading ?? loadAudioBlob(song)));
+	let blob: Blob | undefined;
+	try {
+		blob = prepared?.blob ?? (await prepared?.loading) ?? (await loadAudioBlob(song));
+	} catch (error) {
+		if (request !== playbackRequest) return;
+		console.error('Unable to open track:', error);
+		toast.error(
+			song.source?.kind === 'linked-folder'
+				? `Could not open ${song.fileName}. Check the file and link its folder again.`
+				: `Could not open ${song.fileName}.`
+		);
+		return;
+	}
 	if (!blob || request !== playbackRequest) return;
 	const latestQueue = get(queueState);
 	const queue = latestQueue.items[normalized]?.id === song.id ? latestQueue : state;
